@@ -1,9 +1,3 @@
-// Command prherder is the PR Herder service entrypoint.
-//
-// Layer 0/1 scope: boots an HTTP server with /healthz and
-// /github/webhook. Slack, MCP, and LLM wiring get added here in later
-// layers — nothing about this main() should need restructuring when
-// they land, just more constructor calls.
 package main
 
 import (
@@ -15,8 +9,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/shreyaabaranwal/pr-herder/internal/authz"
 	"github.com/shreyaabaranwal/pr-herder/internal/config"
 	"github.com/shreyaabaranwal/pr-herder/internal/ingest"
+	"github.com/shreyaabaranwal/pr-herder/internal/slackui"
 	"github.com/shreyaabaranwal/pr-herder/internal/store"
 )
 
@@ -47,6 +43,16 @@ func main() {
 
 	webhookHandler := ingest.NewHandler(cfg.GitHubWebhookSecret, db, log)
 	mux.Handle("/github/webhook", webhookHandler)
+
+	// Layer 4: Slack interactivity. The Authorizer needs a GitHub token
+	// with read access to check collaborator permissions — for now this
+	// reuses GITHUB_WEBHOOK_SECRET's absence as a signal to skip wiring
+	// cleanly; a real deployment needs a separate token with repo read
+	// scope, tracked as a Layer 5 config addition.
+	authorizer := authz.NewAuthorizer(db, cfg.GitHubWebhookSecret)
+	executor := slackui.NewStubActionExecutor(log)
+	interactionHandler := slackui.NewInteractionHandler(cfg.SlackSigningSecret, authorizer, executor, log)
+	mux.Handle("/slack/interact", interactionHandler)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,

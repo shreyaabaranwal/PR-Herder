@@ -1,8 +1,3 @@
-// Command testpublish is a throwaway manual-test harness for Layer 3.
-// It builds a fake triage.Result and posts it to Slack, so we can verify
-// blocks.go + publisher.go work end-to-end before wiring them into the
-// real webhook flow. Not meant to be a permanent part of the codebase —
-// delete once Layer 3 is confirmed working, or once Layer 4 supersedes it.
 package main
 
 import (
@@ -22,12 +17,14 @@ func main() {
 	}
 
 	pr := domain.PullRequest{
-		Number:       1423,
-		Title:        "Add rate-limiting to auth middleware",
-		Additions:    120,
-		Deletions:    15,
-		ChangedFiles: []string{"internal/auth/middleware.go"},
-		Association:  domain.AssocFirstTimer,
+		RepoOwner:    "shreyaabaranwal",
+		RepoName:     "PR-Herder",
+		Number:       1,
+		Title:        "test: dummy file for Layer 4/5 end-to-end verification",
+		Additions:    1,
+		Deletions:    0,
+		ChangedFiles: []string{"TEST_LAYER5.md"},
+		Association:  domain.AssocOwner,
 	}
 
 	engine := triage.NewEngine()

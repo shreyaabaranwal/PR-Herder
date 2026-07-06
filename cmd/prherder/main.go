@@ -49,7 +49,7 @@ func main() {
 	// reuses GITHUB_WEBHOOK_SECRET's absence as a signal to skip wiring
 	// cleanly; a real deployment needs a separate token with repo read
 	// scope, tracked as a Layer 5 config addition.
-	authorizer := authz.NewAuthorizer(db, cfg.GitHubWebhookSecret)
+authorizer := authz.NewAuthorizer(db, cfg.GitHubReadToken)
 	executor := slackui.NewStubActionExecutor(log)
 	interactionHandler := slackui.NewInteractionHandler(cfg.SlackSigningSecret, authorizer, executor, log)
 	mux.Handle("/slack/interact", interactionHandler)

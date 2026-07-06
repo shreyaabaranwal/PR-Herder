@@ -28,7 +28,7 @@ type Config struct {
 	GitHubAppID          string
 	GitHubPrivateKeyPath string
 	GitHubWebhookSecret  string
-
+    GitHubReadToken      string
 	GitHubMCPURL string
 
 	AnthropicAPIKey string
@@ -59,7 +59,7 @@ func Load() (*Config, error) {
 		GitHubAppID:          os.Getenv("GITHUB_APP_ID"),
 		GitHubPrivateKeyPath: os.Getenv("GITHUB_APP_PRIVATE_KEY_PATH"),
 		GitHubWebhookSecret:  os.Getenv("GITHUB_WEBHOOK_SECRET"),
-
+        GitHubReadToken:      os.Getenv("GITHUB_READ_TOKEN"),
 		GitHubMCPURL: os.Getenv("GITHUB_MCP_URL"),
 
 		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),

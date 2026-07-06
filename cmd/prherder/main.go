@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-
+    "github.com/shreyaabaranwal/pr-herder/internal/githubmcp"
 	"github.com/shreyaabaranwal/pr-herder/internal/authz"
 	"github.com/shreyaabaranwal/pr-herder/internal/config"
 	"github.com/shreyaabaranwal/pr-herder/internal/ingest"
@@ -50,7 +50,8 @@ func main() {
 	// cleanly; a real deployment needs a separate token with repo read
 	// scope, tracked as a Layer 5 config addition.
 authorizer := authz.NewAuthorizer(db, cfg.GitHubReadToken)
-	executor := slackui.NewStubActionExecutor(log)
+	mcpClient := githubmcp.NewClient(cfg.GitHubMCPURL, cfg.GitHubReadToken)
+	executor := githubmcp.NewExecutor(mcpClient)
 	interactionHandler := slackui.NewInteractionHandler(cfg.SlackSigningSecret, authorizer, executor, log)
 	mux.Handle("/slack/interact", interactionHandler)
 

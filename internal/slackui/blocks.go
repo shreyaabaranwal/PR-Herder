@@ -1,8 +1,3 @@
-// Package slackui builds Slack Block Kit payloads and posts them. It is
-// the only package that knows Slack's wire format (blocks, sections,
-// buttons) — triage.Result stays Slack-agnostic, and this package
-// translates it at the boundary, mirroring the same anti-corruption
-// pattern used for GitHub's webhook payloads in internal/ingest.
 package slackui
 
 import (
@@ -12,8 +7,9 @@ import (
 )
 
 // BuildTriageCardBlocks renders a triage.Result as a Slack Block Kit
-// payload. Layer 3 is read-only — no action buttons yet. Those arrive in
-// Layer 4, gated behind the authz work.
+// payload. Layer 4 added real interactivity — action buttons whose
+// value encodes "owner/repo#number", matching what
+// interactions.go's parseActionValue expects.
 func BuildTriageCardBlocks(result triage.Result) []map[string]any {
 	pr := result.PR
 
@@ -75,6 +71,38 @@ func BuildTriageCardBlocks(result triage.Result) []map[string]any {
 			},
 		})
 	}
+
+	// actionValue encodes "owner/repo#number" — the exact format
+	// interactions.go's parseActionValue expects. Kept as a local helper
+	// here so the encoding logic lives in exactly one place per direction
+	// (encode here, decode in interactions.go) rather than scattered.
+	actionValue := fmt.Sprintf("%s/%s#%d", pr.RepoOwner, pr.RepoName, pr.Number)
+
+	blocks = append(blocks, map[string]any{
+		"type": "actions",
+		"elements": []map[string]any{
+			{
+				"type": "button",
+				"text": map[string]any{
+					"type": "plain_text",
+					"text": "Approve",
+				},
+				"style":     "primary",
+				"action_id": "approve",
+				"value":     actionValue,
+			},
+			{
+				"type": "button",
+				"text": map[string]any{
+					"type": "plain_text",
+					"text": "Request changes",
+				},
+				"style":     "danger",
+				"action_id": "request_changes",
+				"value":     actionValue,
+			},
+		},
+	})
 
 	return blocks
 }

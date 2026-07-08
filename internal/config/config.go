@@ -64,7 +64,6 @@ func Load() (*Config, error) {
 		GitHubMCPURL: os.Getenv("GITHUB_MCP_URL"),
 
 		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
-            GeminiAPIKey:    os.Getenv("GEMINI_API_KEY"),
 	}
 
 	var err error

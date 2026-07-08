@@ -29,11 +29,12 @@ func BuildTriageCardBlocks(result triage.Result) []map[string]any {
 	}
 	if result.Ambiguous {
 		bodyLines = append(bodyLines, "_Large, unrouted diff — flagged for LLM summary (Layer 7)_")
+	}
+
 	for checkName, verdict := range result.FlakyChecks {
 		if verdict.IsFlaky {
 			bodyLines = append(bodyLines, fmt.Sprintf("CI failing, but on `%s`, historically flaky (safe to retry)", checkName))
 		}
-	}
 	}
 
 	bodyText := ""

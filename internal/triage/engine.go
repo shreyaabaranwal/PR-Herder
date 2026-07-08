@@ -24,6 +24,16 @@ type Result struct {
 	// back to GitHub behind maintainer confirmation for security-relevant
 	// labels.
 	Labels []string
+
+	// FlakyChecks holds the flaky-classification verdict for any CI
+	// checks on this PR that the caller looked up (Layer 6). This is a
+	// map, not a single verdict, because a PR can have multiple check
+	// runs (lint, test, build) each with independent flaky history.
+	// Populated by the caller (a Layer 6 follow-up to ingest/worker.go)
+	// after fetching check-run history -- Triage() itself stays a pure,
+	// network-free function per ADR 0001, so this is never set inside
+	// Triage() itself.
+	FlakyChecks map[string]FlakyVerdict
 }
 
 // Engine runs the deterministic rule layers, in order, over a PR. It

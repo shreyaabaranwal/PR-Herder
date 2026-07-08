@@ -72,6 +72,14 @@ func (a *Authorizer) CanActOnRepo(ctx context.Context, slackUserID, repoOwner, r
 		return false, "no linked GitHub account — link your account first", nil
 	}
 
+	// Repo owner always has write access -- GitHub's collaborator-permission
+	// API sometimes does not include the owner in collaborator listings
+	// (owner is a distinct category from collaborator), so check this
+	// explicitly rather than relying solely on the collaborator API.
+	if githubLogin == repoOwner {
+		return true, "", nil
+	}
+
 	level, err := a.getCollaboratorPermission(ctx, repoOwner, repoName, githubLogin)
 	if err != nil {
 		return false, "", fmt.Errorf("check github permission: %w", err)

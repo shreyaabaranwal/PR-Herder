@@ -14,6 +14,7 @@ import (
 	"github.com/shreyaabaranwal/pr-herder/internal/ingest"
 	"github.com/shreyaabaranwal/pr-herder/internal/slackui"
 	"github.com/shreyaabaranwal/pr-herder/internal/store"
+	"github.com/shreyaabaranwal/pr-herder/internal/triage"
 )
 
 func main() {
@@ -68,6 +69,17 @@ authorizer := authz.NewAuthorizer(db, cfg.GitHubReadToken)
 			os.Exit(1)
 		}
 	}()
+
+	// Layer 6: async worker draining webhook_events into triaged Slack
+	// cards. Runs alongside the HTTP server, polling rather than being
+	// triggered directly by the webhook handler -- keeps the fast-ack
+	// guarantee in webhook.go's ServeHTTP intact (see that file's doc
+	// comment): a slow triage run here can never cause GitHub to see a
+	// webhook timeout.
+	triageEngine := triage.NewEngine()
+	publisher := slackui.NewPublisher(cfg.SlackBotToken, cfg.SlackDefaultChan)
+	worker := ingest.NewWorker(db, triageEngine, publisher, log)
+	go worker.Run(ctx, 5*time.Second)
 
 	<-ctx.Done()
 	log.Info("shutting down")

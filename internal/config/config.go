@@ -65,7 +65,6 @@ func Load() (*Config, error) {
 
 		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
             GeminiAPIKey:    os.Getenv("GEMINI_API_KEY"),
-		GeminiAPIKey:    os.Getenv("GEMINI_API_KEY"),
 	}
 
 	var err error

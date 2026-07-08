@@ -30,6 +30,7 @@ func main() {
 	engine := triage.NewEngine()
 	result := engine.Triage(pr)
 
+
 	publisher := slackui.NewPublisher(cfg.SlackBotToken, cfg.SlackDefaultChan)
 	if err := publisher.PublishTriageCard(context.Background(), result); err != nil {
 		log.Fatalf("publish failed: %v", err)

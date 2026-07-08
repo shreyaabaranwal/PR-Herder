@@ -63,8 +63,8 @@ func Load() (*Config, error) {
         GitHubReadToken:      os.Getenv("GITHUB_READ_TOKEN"),
 		GitHubMCPURL: os.Getenv("GITHUB_MCP_URL"),
 
-		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
-	}
+		
+		GeminiAPIKey:    os.Getenv("GEMINI_API_KEY"),
 
 	var err error
 	cfg.StaleDaysThreshold, err = getInt("STALE_PR_DAYS", 7)

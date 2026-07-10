@@ -1,21 +1,16 @@
+
 package main
 
 import (
 	"context"
 	"log"
 
-	"github.com/shreyaabaranwal/pr-herder/internal/config"
 	"github.com/shreyaabaranwal/pr-herder/internal/llm"
 )
 
 func main() {
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatalf("config load failed: %v", err)
-	}
-
-	client := llm.NewClient(cfg.GeminiAPIKey, "gemini-2.0-flash")
-	summarizer := llm.NewSummarizer(client)
+	ollamaClient := llm.NewOllamaClient("http://localhost:11434", "llama3.2:3b")
+	summarizer := llm.NewSummarizer(ollamaClient)
 
 	input := llm.PRSummaryInput{
 		Title:        "Refactor auth middleware and add rate limiting across 12 files",

@@ -17,13 +17,19 @@ type PRSummaryInput struct {
 	Deletions    int
 	ChangedFiles []string
 }
-
-// Summarizer wraps a Client with PR-Herder-specific prompt construction.
-type Summarizer struct {
-	client *Client
+// Generator is anything that can turn a prompt into text -- Gemini and
+// Ollama both satisfy this, so Summarizer doesn't care which backend
+// is wired up.
+type Generator interface {
+	Generate(ctx context.Context, prompt string) (string, error)
 }
 
-func NewSummarizer(client *Client) *Summarizer {
+// Summarizer wraps a Generator with PR-Herder-specific prompt construction.
+type Summarizer struct {
+	client Generator
+}
+
+func NewSummarizer(client Generator) *Summarizer {
 	return &Summarizer{client: client}
 }
 

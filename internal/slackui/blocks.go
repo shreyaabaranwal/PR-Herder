@@ -37,12 +37,6 @@ func BuildTriageCardBlocks(result triage.Result) []map[string]any {
 		}
 	}
 
-	for checkName, verdict := range result.FlakyChecks {
-		if verdict.IsFlaky {
-			bodyLines = append(bodyLines, fmt.Sprintf("CI failing, but on `%s`, historically flaky (safe to retry)", checkName))
-		}
-	}
-
 	bodyText := ""
 	for i, line := range bodyLines {
 		if i > 0 {
@@ -66,6 +60,20 @@ func BuildTriageCardBlocks(result triage.Result) []map[string]any {
 				"text": bodyText,
 			},
 		},
+	}
+
+	// Layer 7: only populated for Ambiguous PRs where the LLM summary
+	// succeeded (see ingest/worker.go). Rendered as its own section,
+	// clearly labeled, so maintainers know it's a generated summary and
+	// not a human-written description.
+	if result.Summary != "" {
+		blocks = append(blocks, map[string]any{
+			"type": "section",
+			"text": map[string]any{
+				"type": "mrkdwn",
+				"text": ":sparkles: *Summary:* " + result.Summary,
+			},
+		})
 	}
 
 	if len(result.Labels) > 0 {

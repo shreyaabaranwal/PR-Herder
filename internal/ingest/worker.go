@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/shreyaabaranwal/pr-herder/internal/domain"
+	"github.com/shreyaabaranwal/pr-herder/internal/llm"
 	"github.com/shreyaabaranwal/pr-herder/internal/slackui"
 	"github.com/shreyaabaranwal/pr-herder/internal/store"
 	"github.com/shreyaabaranwal/pr-herder/internal/triage"
@@ -19,18 +20,24 @@ import (
 
 // Worker polls webhook_events for unprocessed rows and triages them.
 type Worker struct {
-	store     *store.Store
-	engine    *triage.Engine
-	publisher *slackui.Publisher
-	log       *slog.Logger
+	store      *store.Store
+	engine     *triage.Engine
+	publisher  *slackui.Publisher
+	summarizer *llm.Summarizer
+	log        *slog.Logger
 }
 
-func NewWorker(s *store.Store, engine *triage.Engine, publisher *slackui.Publisher, log *slog.Logger) *Worker {
+// summarizer may be nil -- if so, ambiguous PRs are published without a
+// summary rather than the worker failing. This keeps Layer 7 optional:
+// the pipeline (Layers 0-6) works fully even if no LLM backend is wired
+// in main.go.
+func NewWorker(s *store.Store, engine *triage.Engine, publisher *slackui.Publisher, summarizer *llm.Summarizer, log *slog.Logger) *Worker {
 	return &Worker{
-		store:     s,
-		engine:    engine,
-		publisher: publisher,
-		log:       log,
+		store:      s,
+		engine:     engine,
+		publisher:  publisher,
+		summarizer: summarizer,
+		log:        log,
 	}
 }
 
@@ -98,6 +105,26 @@ func (w *Worker) processOne(ctx context.Context, ev store.UnprocessedEvent) erro
 	}
 
 	result := w.engine.Triage(pr)
+
+	// Layer 7: only ambiguous PRs get an LLM summary (ADR 0001). A
+	// summarizer failure here is logged, not fatal -- the Slack card
+	// still gets published without a summary rather than losing the
+	// whole triage result over an LLM hiccup.
+	if result.Ambiguous && w.summarizer != nil {
+		summary, sumErr := w.summarizer.Summarize(ctx, llm.PRSummaryInput{
+			Title:        pr.Title,
+			Body:         pr.Body,
+			Additions:    pr.Additions,
+			Deletions:    pr.Deletions,
+			ChangedFiles: pr.ChangedFiles,
+		})
+		if sumErr != nil {
+			w.log.Warn("llm summary failed, publishing without it",
+				"delivery_id", ev.DeliveryID, "err", sumErr)
+		} else {
+			result.Summary = summary
+		}
+	}
 
 	if err := w.publisher.PublishTriageCard(ctx, result); err != nil {
 		return fmt.Errorf("publish triage card: %w", err)

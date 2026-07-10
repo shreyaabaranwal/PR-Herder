@@ -65,7 +65,7 @@ func Load() (*Config, error) {
 
 		
 		GeminiAPIKey:    os.Getenv("GEMINI_API_KEY"),
-
+	}
 	var err error
 	cfg.StaleDaysThreshold, err = getInt("STALE_PR_DAYS", 7)
 	if err != nil {

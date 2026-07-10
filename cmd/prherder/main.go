@@ -12,6 +12,7 @@ import (
 	"github.com/shreyaabaranwal/pr-herder/internal/authz"
 	"github.com/shreyaabaranwal/pr-herder/internal/config"
 	"github.com/shreyaabaranwal/pr-herder/internal/ingest"
+	"github.com/shreyaabaranwal/pr-herder/internal/llm"
 	"github.com/shreyaabaranwal/pr-herder/internal/slackui"
 	"github.com/shreyaabaranwal/pr-herder/internal/store"
 	"github.com/shreyaabaranwal/pr-herder/internal/triage"
@@ -78,7 +79,14 @@ authorizer := authz.NewAuthorizer(db, cfg.GitHubReadToken)
 	// webhook timeout.
 	triageEngine := triage.NewEngine()
 	publisher := slackui.NewPublisher(cfg.SlackBotToken, cfg.SlackDefaultChan)
-	worker := ingest.NewWorker(db, triageEngine, publisher, log)
+
+	// Layer 7: local Ollama backend -- no billing/quota dependency (see
+	// ADR follow-up re: Gemini free-tier requiring billing as of 2026).
+	// Model must already be pulled: `ollama pull llama3.2:3b`.
+	ollamaClient := llm.NewOllamaClient("http://localhost:11434", "llama3.2:3b")
+	summarizer := llm.NewSummarizer(ollamaClient)
+
+	worker := ingest.NewWorker(db, triageEngine, publisher, summarizer, log)
 	go worker.Run(ctx, 5*time.Second)
 
 	<-ctx.Done()

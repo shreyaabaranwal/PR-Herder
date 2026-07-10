@@ -34,6 +34,13 @@ type Result struct {
 	// network-free function per ADR 0001, so this is never set inside
 	// Triage() itself.
 	FlakyChecks map[string]FlakyVerdict
+
+	// Summary is the Layer 7 LLM-generated factual summary, populated by
+	// the caller (ingest/worker.go) only when Ambiguous is true. Empty
+	// string means either not ambiguous, or ambiguous but summary
+	// generation failed/was skipped -- callers should treat an empty
+	// Summary as "no summary available," not an error.
+	Summary string
 }
 
 // Engine runs the deterministic rule layers, in order, over a PR. It

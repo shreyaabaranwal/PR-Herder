@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prherder-config
+  namespace: pr-herder
+data:
+  PORT: "8090"
+  SLACK_DEFAULT_CHANNEL: "new-channel"
+  GITHUB_MCP_URL: "https://api.githubcopilot.com/mcp/"
+  OLLAMA_URL: "http://ollama:11434"
+  OLLAMA_MODEL: "llama3.2:3b"
+  STALE_PR_DAYS: "7"
+  DIGEST_HOUR_LOCAL: "9"
+  QUIET_HOURS: "22-08"

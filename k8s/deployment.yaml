@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prherder
+  namespace: pr-herder
+  labels:
+    app: prherder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prherder
+  template:
+    metadata:
+      labels:
+        app: prherder
+      annotations:
+        # Standard Prometheus scrape annotations -- picked up automatically
+        # by most cluster Prometheus setups without extra config.
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8090"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: prherder
+          image: prherder:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8090
+          envFrom:
+            - configMapRef:
+                name: prherder-config
+            - secretRef:
+                name: prherder-secrets
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 8090
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8090
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"

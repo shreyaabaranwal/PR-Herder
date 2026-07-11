@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: prherder
+  namespace: pr-herder
+spec:
+  selector:
+    app: prherder
+  ports:
+    - port: 80
+      targetPort: 8090
+  type: ClusterIP

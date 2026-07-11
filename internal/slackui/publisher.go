@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/shreyaabaranwal/pr-herder/internal/triage"
 )
@@ -24,7 +25,7 @@ func NewPublisher(botToken, defaultChannel string) *Publisher {
 	return &Publisher{
 		botToken:       botToken,
 		defaultChannel: defaultChannel,
-		httpClient:     &http.Client{},
+		httpClient:     &http.Client{Timeout: 10 * time.Second},
 	}
 }
 

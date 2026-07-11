@@ -102,6 +102,11 @@ func (w *Worker) processBatch(ctx context.Context) error {
 // PR number) are treated as a no-op success -- there's nothing to
 // triage, not an error.
 func (w *Worker) processOne(ctx context.Context, ev store.UnprocessedEvent) error {
+	start := time.Now()
+	defer func() {
+		w.log.Info("processOne finished", "delivery_id", ev.DeliveryID, "duration_ms", time.Since(start).Milliseconds())
+	}()
+
 	if ev.PRNumber == nil {
 		w.log.Info("skipping non-PR event", "delivery_id", ev.DeliveryID, "event_type", ev.EventType)
 		return nil
@@ -153,23 +158,33 @@ result := w.engine.Triage(pr)
 	// still gets published without a summary rather than losing the
 	// whole triage result over an LLM hiccup.
 	if result.Ambiguous && w.summarizer != nil {
-		summary, sumErr := w.summarizer.Summarize(ctx, llm.PRSummaryInput{
-			Title:        pr.Title,
-			Body:         pr.Body,
-			Additions:    pr.Additions,
-			Deletions:    pr.Deletions,
-			ChangedFiles: pr.ChangedFiles,
+		var summary string
+		sumErr := withRetry(ctx, 3, func() error {
+			s, err := w.summarizer.Summarize(ctx, llm.PRSummaryInput{
+				Title:        pr.Title,
+				Body:         pr.Body,
+				Additions:    pr.Additions,
+				Deletions:    pr.Deletions,
+				ChangedFiles: pr.ChangedFiles,
+			})
+			if err != nil {
+				return err
+			}
+			summary = s
+			return nil
 		})
 		if sumErr != nil {
-			w.log.Warn("llm summary failed, publishing without it",
+			w.log.Warn("llm summary failed after retries, publishing without it",
 				"delivery_id", ev.DeliveryID, "err", sumErr)
 		} else {
 			result.Summary = summary
 		}
 	}
 
-	if err := w.publisher.PublishTriageCard(ctx, result); err != nil {
-		return fmt.Errorf("publish triage card: %w", err)
+	if err := withRetry(ctx, 3, func() error {
+		return w.publisher.PublishTriageCard(ctx, result)
+	}); err != nil {
+		return fmt.Errorf("publish triage card after retries: %w", err)
 	}
 
 	w.log.Info("triaged and published",

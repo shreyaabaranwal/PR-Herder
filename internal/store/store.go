@@ -32,6 +32,13 @@ func (s *Store) Close() {
 	s.pool.Close()
 }
 
+// Ping checks the Postgres connection is alive -- used by /readyz so a
+// k8s readiness probe can detect "process is up but DB is unreachable"
+// and stop routing traffic here.
+func (s *Store) Ping(ctx context.Context) error {
+	return s.pool.Ping(ctx)
+}
+
 // InsertWebhookEvent records a raw webhook delivery. It relies on the
 // UNIQUE constraint on delivery_id to make this idempotent: if GitHub
 // redelivers the same event (which it does, on timeout or manual

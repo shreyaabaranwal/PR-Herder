@@ -43,6 +43,23 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+	// /livez: process is up and serving HTTP -- doesn't check dependencies.
+	mux.HandleFunc("/livez", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	// /readyz: process is up AND its dependencies (Postgres) are reachable.
+	// A k8s readiness probe hitting this should stop routing traffic here
+	// if Postgres is down, rather than accepting webhooks it can't persist.
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if err := db.Ping(r.Context()); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("not ready: " + err.Error()))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
 
 	webhookHandler := ingest.NewHandler(cfg.GitHubWebhookSecret, db, log)
 	mux.Handle("/github/webhook", webhookHandler)

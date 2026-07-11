@@ -1,0 +1,19 @@
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+*.env~
+
+# Build artifacts
+testllm
+testpublish
+testscheduler
+prherder
+*.tmp
+
+# Go
+/vendor/
+
+# OS/editor cruft
+.DS_Store
+*.swp

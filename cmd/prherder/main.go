@@ -8,9 +8,12 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-    "github.com/shreyaabaranwal/pr-herder/internal/githubmcp"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/shreyaabaranwal/pr-herder/internal/authz"
 	"github.com/shreyaabaranwal/pr-herder/internal/config"
+	"github.com/shreyaabaranwal/pr-herder/internal/githubmcp"
+	"github.com/shreyaabaranwal/pr-herder/internal/httpmw"
 	"github.com/shreyaabaranwal/pr-herder/internal/ingest"
 	"github.com/shreyaabaranwal/pr-herder/internal/llm"
 	"github.com/shreyaabaranwal/pr-herder/internal/scheduler"
@@ -39,15 +42,18 @@ func main() {
 	defer db.Close()
 
 	mux := http.NewServeMux()
+
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+
 	// /livez: process is up and serving HTTP -- doesn't check dependencies.
 	mux.HandleFunc("/livez", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+
 	// /readyz: process is up AND its dependencies (Postgres) are reachable.
 	// A k8s readiness probe hitting this should stop routing traffic here
 	// if Postgres is down, rather than accepting webhooks it can't persist.
@@ -61,6 +67,8 @@ func main() {
 		_, _ = w.Write([]byte("ok"))
 	})
 
+	mux.Handle("/metrics", promhttp.Handler())
+
 	webhookHandler := ingest.NewHandler(cfg.GitHubWebhookSecret, db, log)
 	mux.Handle("/github/webhook", webhookHandler)
 
@@ -69,7 +77,7 @@ func main() {
 	// reuses GITHUB_WEBHOOK_SECRET's absence as a signal to skip wiring
 	// cleanly; a real deployment needs a separate token with repo read
 	// scope, tracked as a Layer 5 config addition.
-authorizer := authz.NewAuthorizer(db, cfg.GitHubReadToken)
+	authorizer := authz.NewAuthorizer(db, cfg.GitHubReadToken)
 	mcpClient := githubmcp.NewClient(cfg.GitHubMCPURL, cfg.GitHubReadToken)
 	executor := githubmcp.NewExecutor(mcpClient)
 	interactionHandler := slackui.NewInteractionHandler(cfg.SlackSigningSecret, authorizer, executor, log)
@@ -77,7 +85,7 @@ authorizer := authz.NewAuthorizer(db, cfg.GitHubReadToken)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           mux,
+		Handler:           httpmw.Recover(log, mux),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -101,20 +109,20 @@ authorizer := authz.NewAuthorizer(db, cfg.GitHubReadToken)
 	// Layer 7: local Ollama backend -- no billing/quota dependency (see
 	// ADR follow-up re: Gemini free-tier requiring billing as of 2026).
 	// Model must already be pulled: `ollama pull llama3.2:3b`.
-ollamaClient := llm.NewOllamaClient(
-    cfg.OllamaURL,
-    cfg.OllamaModel,
-)
+	ollamaClient := llm.NewOllamaClient(
+		cfg.OllamaURL,
+		cfg.OllamaModel,
+	)
 	summarizer := llm.NewSummarizer(ollamaClient)
 
-worker := ingest.NewWorker(
-	db,
-	triageEngine,
-	publisher,
-	mcpClient,
-	summarizer,
-	log,
-)
+	worker := ingest.NewWorker(
+		db,
+		triageEngine,
+		publisher,
+		mcpClient,
+		summarizer,
+		log,
+	)
 	go worker.Run(ctx, 5*time.Second)
 
 	// Layer 8: independent of the real-time webhook->triage->Slack path --

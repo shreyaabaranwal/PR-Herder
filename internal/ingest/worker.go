@@ -10,10 +10,11 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
-     
-	"github.com/shreyaabaranwal/pr-herder/internal/githubmcp"
+
 	"github.com/shreyaabaranwal/pr-herder/internal/domain"
+	"github.com/shreyaabaranwal/pr-herder/internal/githubmcp"
 	"github.com/shreyaabaranwal/pr-herder/internal/llm"
+	"github.com/shreyaabaranwal/pr-herder/internal/metrics"
 	"github.com/shreyaabaranwal/pr-herder/internal/slackui"
 	"github.com/shreyaabaranwal/pr-herder/internal/store"
 	"github.com/shreyaabaranwal/pr-herder/internal/triage"
@@ -24,7 +25,7 @@ type Worker struct {
 	store      *store.Store
 	engine     *triage.Engine
 	publisher  *slackui.Publisher
-	github *githubmcp.Client
+	github     *githubmcp.Client
 	summarizer *llm.Summarizer
 	log        *slog.Logger
 }
@@ -40,15 +41,15 @@ func NewWorker(
 	github *githubmcp.Client,
 	summarizer *llm.Summarizer,
 	log *slog.Logger,
-) *Worker{
+) *Worker {
 	return &Worker{
-	store: s,
-	engine: engine,
-	publisher: publisher,
-	github: github,
-	summarizer: summarizer,
-	log: log,
-}
+		store:      s,
+		engine:     engine,
+		publisher:  publisher,
+		github:     github,
+		summarizer: summarizer,
+		log:        log,
+	}
 }
 
 // Run polls forever at the given interval until ctx is cancelled. Each
@@ -84,8 +85,14 @@ func (w *Worker) processBatch(ctx context.Context) error {
 		if err := w.processOne(ctx, ev); err != nil {
 			w.log.Error("event processing failed",
 				"delivery_id", ev.DeliveryID, "err", err)
+			metrics.WorkerErrorsTotal.Inc()
+			wasAlreadyMaxed := ev.RetryCount+1 >= store.MaxRetries
 			if markErr := w.store.MarkEventFailed(ctx, ev.ID, err); markErr != nil {
 				w.log.Error("failed to record processing error", "err", markErr)
+			} else if wasAlreadyMaxed {
+				metrics.EventsDeadLettered.Inc()
+				w.log.Warn("event dead-lettered after exhausting retries",
+					"delivery_id", ev.DeliveryID, "retry_count", ev.RetryCount+1)
 			}
 			continue // one bad event shouldn't block the rest of the batch
 		}
@@ -104,7 +111,9 @@ func (w *Worker) processBatch(ctx context.Context) error {
 func (w *Worker) processOne(ctx context.Context, ev store.UnprocessedEvent) error {
 	start := time.Now()
 	defer func() {
-		w.log.Info("processOne finished", "delivery_id", ev.DeliveryID, "duration_ms", time.Since(start).Milliseconds())
+		elapsed := time.Since(start)
+		w.log.Info("processOne finished", "delivery_id", ev.DeliveryID, "duration_ms", elapsed.Milliseconds())
+		metrics.TriageDuration.Observe(elapsed.Seconds())
 	}()
 
 	if ev.PRNumber == nil {
@@ -113,46 +122,46 @@ func (w *Worker) processOne(ctx context.Context, ev store.UnprocessedEvent) erro
 	}
 
 	pr, ok := buildPullRequestFromPayload(ev)
-if !ok {
-	w.log.Warn(
-		"could not extract PR data from payload, skipping",
-		"delivery_id", ev.DeliveryID,
-	)
-	return nil
-}
-
-// Layer 7: enrich the PR with the real changed file list before
-// deterministic triage and LLM summarization.
-files, err := w.github.GetPullRequestFiles(
-	ctx,
-	pr.RepoOwner,
-	pr.RepoName,
-	pr.Number,
-)
-
-if err != nil {
-	w.log.Warn(
-		"failed to fetch changed files from GitHub MCP",
-		"repo", pr.RepoOwner+"/"+pr.RepoName,
-		"pr", pr.Number,
-		"err", err,
-	)
-} else {
-	changedFiles := make([]string, 0, len(files))
-	for _, f := range files {
-		changedFiles = append(changedFiles, f.Filename)
+	if !ok {
+		w.log.Warn(
+			"could not extract PR data from payload, skipping",
+			"delivery_id", ev.DeliveryID,
+		)
+		return nil
 	}
-	pr.ChangedFiles = changedFiles
-	w.log.Info(
-    "loaded changed files",
-    "repo", pr.RepoOwner+"/"+pr.RepoName,
-    "pr", pr.Number,
-    "count", len(changedFiles),
-    "files", changedFiles,
-)
-}
 
-result := w.engine.Triage(pr)
+	// Layer 7: enrich the PR with the real changed file list before
+	// deterministic triage and LLM summarization.
+	files, err := w.github.GetPullRequestFiles(
+		ctx,
+		pr.RepoOwner,
+		pr.RepoName,
+		pr.Number,
+	)
+
+	if err != nil {
+		w.log.Warn(
+			"failed to fetch changed files from GitHub MCP",
+			"repo", pr.RepoOwner+"/"+pr.RepoName,
+			"pr", pr.Number,
+			"err", err,
+		)
+	} else {
+		changedFiles := make([]string, 0, len(files))
+		for _, f := range files {
+			changedFiles = append(changedFiles, f.Filename)
+		}
+		pr.ChangedFiles = changedFiles
+		w.log.Info(
+			"loaded changed files",
+			"repo", pr.RepoOwner+"/"+pr.RepoName,
+			"pr", pr.Number,
+			"count", len(changedFiles),
+			"files", changedFiles,
+		)
+	}
+
+	result := w.engine.Triage(pr)
 	// Layer 7: only ambiguous PRs get an LLM summary (ADR 0001). A
 	// summarizer failure here is logged, not fatal -- the Slack card
 	// still gets published without a summary rather than losing the
@@ -176,16 +185,20 @@ result := w.engine.Triage(pr)
 		if sumErr != nil {
 			w.log.Warn("llm summary failed after retries, publishing without it",
 				"delivery_id", ev.DeliveryID, "err", sumErr)
+			metrics.LLMRequestsTotal.WithLabelValues("failure").Inc()
 		} else {
 			result.Summary = summary
+			metrics.LLMRequestsTotal.WithLabelValues("success").Inc()
 		}
 	}
 
 	if err := withRetry(ctx, 3, func() error {
 		return w.publisher.PublishTriageCard(ctx, result)
 	}); err != nil {
+		metrics.SlackPublishTotal.WithLabelValues("failure").Inc()
 		return fmt.Errorf("publish triage card after retries: %w", err)
 	}
+	metrics.SlackPublishTotal.WithLabelValues("success").Inc()
 
 	w.log.Info("triaged and published",
 		"delivery_id", ev.DeliveryID, "repo", ev.RepoOwner+"/"+ev.RepoName, "pr", *ev.PRNumber)

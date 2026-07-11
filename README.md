@@ -6,363 +6,243 @@
 
 Triage incoming PRs, route reviews to the right people, catch flaky CI, and approve or request changes — without ever leaving Slack.
 
-[![Built for Slack Agent Builder Challenge](https://img.shields.io/badge/Slack-Agent%20Builder%20Challenge-4A154B)](https://slack.dev)
-[![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev)
-[![GitHub MCP](https://img.shields.io/badge/GitHub-MCP%20Integration-181717?logo=github&logoColor=white)](https://github.com)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](https://go.dev)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Slack](https://img.shields.io/badge/Slack-Block%20Kit-4A154B?logo=slack&logoColor=white)](https://api.slack.com/block-kit)
+[![MCP](https://img.shields.io/badge/GitHub-MCP%20Server-000000?logo=github)](https://github.com/github/github-mcp-server)
+[![Ollama](https://img.shields.io/badge/LLM-Ollama%20(local)-1a1a1a)](https://ollama.com)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-ready-326CE5?logo=kubernetes&logoColor=white)](https://kubernetes.io/)
+
+Built for the [Slack Agent Builder Challenge](https://slack-agent-builder-challenge.devpost.com/)
 
 </div>
 
 ---
 
-PR Herder lives in your maintainers' Slack workspace and turns the chaotic stream of GitHub pull requests into a calm, prioritized, actionable feed. It triages incoming PRs, routes reviews intelligently, detects flaky CI, nudges on stale reviews without spamming, and lets maintainers act on pull requests directly from Slack — all behind a strict authorization model.
+## Table of contents
 
-Built for the **Slack Agent Builder Challenge**. Uses **GitHub MCP integration** and **Slack AI capabilities**. Written in **Go**.
-
-> **Why this exists**
-> Maintaining an active open-source repo means drowning in PR noise — first-time contributors waiting days for a hello, security-sensitive changes buried under typo fixes, and "red" CI that's actually just a flaky test. PR Herder is the triage layer maintainers never had.
-
----
-
-## Contents
-
-- [Features](#features)
-- [How It Works](#how-it-works)
+- [Overview](#overview)
+- [Why PR Herder](#why-pr-herder)
 - [Architecture](#architecture)
-- [The Triage Engine](#the-triage-engine)
-- [Security and Authorization Model](#security-and-authorization-model)
-- [Getting Started](#getting-started)
+- [Design principle](#design-principle)
+- [Features by layer](#features-by-layer)
+- [Tech stack](#tech-stack)
+- [Getting started](#getting-started)
 - [Configuration](#configuration)
-- [Slack App Manifest](#slack-app-manifest)
-- [GitHub MCP Tools Used](#github-mcp-tools-used)
-- [Local Development](#local-development)
 - [Deployment](#deployment)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
+- [Observability](#observability)
+- [Project structure](#project-structure)
+- [Team](#team)
 - [License](#license)
 
 ---
 
-## Features
+## Overview
 
-### Smart PR triage — not just an LLM wrapper
+PR Herder is a Go-based Slack agent that watches GitHub pull requests, triages them using deterministic rules, optionally summarizes ambiguous changes with a locally-hosted LLM, and posts an interactive card straight into Slack. Reviewers approve or request changes with a single click — the action executes on GitHub in real time through the official **GitHub MCP Server**, using JSON-RPC over Server-Sent Events.
 
-Every incoming PR runs through a **deterministic rules engine first** (file paths, CODEOWNERS, diff size, CI status, `author_association`). The LLM is only invoked on genuinely ambiguous PRs, and only to *explain* — never to make security-critical routing decisions. This keeps cost low, latency predictable, and behavior auditable.
+No context-switching. No stale PR queues. No CI noise. Just a Slack channel that tells you exactly what needs your attention, and lets you act on it immediately.
 
-A triaged PR posts to Slack as a rich Block Kit card:
+## Why PR Herder
 
-> **#1423 · Add rate-limiting to auth middleware** — `needs-security-review`
-> Touches `internal/auth/**` → routed to @security-team
-> CI failing, but on `TestFlakyRetry`, historically flaky (safe to retry)
-> First-time contributor — welcome message auto-suggested
->
-> `[ Approve ]` `[ Request changes ]` `[ Add label ]` `[ Assign reviewer ]`
+Open-source maintainers and busy engineering teams lose real time every day tabbing between GitHub and Slack — checking CI status, re-reading diffs to figure out who should review, and manually pinging people about stale PRs. PR Herder collapses that whole loop into one surface.
 
-### Reviewer load-balancer
-
-Instead of round-robin, PR Herder routes review requests based on **code ownership and current review load**, so no single maintainer becomes the bottleneck.
-
-### Flaky-CI detective
-
-Detects the classic *fails-then-passes-on-retry* pattern across CI history and tells the maintainer **"this red is flaky, safe to merge"** — instead of everyone assuming the PR is broken. This is the AIOps heart of the project.
-
-### Non-spammy stale nudges
-
-Stale PRs are surfaced in **one batched daily digest**, sent privately to the responsible reviewer, respecting quiet hours and snooze/mute controls. No channel spam, ever.
-
-### Act from Slack, safely
-
-Approve, request changes, label, or assign directly from Slack buttons. Every mutating action verifies the Slack user maps to a GitHub identity **with write access to that repo**, and acts using *their* scoped credentials behind an approval gate.
-
-### Contributor-friendly
-
-First-time contributors get an auto-suggested welcome. Blocked PRs get a plain-English "here's exactly what to fix" explanation posted back to GitHub (opt-in).
-
----
-
-## How It Works
-
-```
-GitHub PR event  ──webhook──▶  PR Herder (Go)  ──▶  Triage Engine  ──▶  Slack Block Kit card
-                                     ▲                                          │
-                                     │                                          │ button click
-                                     └──────────  GitHub MCP  ◀─────────────────┘
-                                         (scoped, per-user authorized writes)
-```
-
-1. **Ingest** — GitHub webhooks hit PR Herder. Events are verified, deduplicated (idempotency keys), and queued.
-2. **Triage** — The deterministic rules engine classifies the PR. Ambiguous cases escalate to the LLM for a summary only.
-3. **Surface** — A Block Kit card is posted to the configured Slack channel with context and action buttons.
-4. **Act** — Maintainer clicks a button → Slack sends an interaction → PR Herder authorizes the user → executes the action via the GitHub MCP server using scoped credentials.
-5. **Follow up** — Stale PRs, flaky-CI notes, and reviewer nudges are batched into digests.
-
----
+- **Deterministic-first triage** — routing and risk decisions are made by explicit rules, not by an LLM. This keeps behavior predictable, auditable, and fast.
+- **AI where it actually helps** — a locally-hosted LLM (Ollama) is invoked *only* for large, unrouted diffs where a human would otherwise have to read the whole thing to understand intent.
+- **Real actions, not suggestions** — Approve and Request Changes buttons in Slack execute genuine GitHub reviews via MCP, authorized against real repo permissions before anything happens.
+- **Production-grade from day one** — retries with backoff, a dead-letter queue, Prometheus metrics, structured logging, health probes, and both Docker and Kubernetes deployment paths.
 
 ## Architecture
 
-```
-┌────────────────────────────────────────────────────────────────────┐
-│                          PR Herder (Go service)                     │
-│                                                                      │
-│  ┌────────────┐   ┌───────────────┐   ┌─────────────────────────┐  │
-│  │  Ingest    │   │   Event Queue │   │     Triage Engine       │  │
-│  │  Handler   │──▶│  (debounce +  │──▶│  1. Deterministic rules │  │
-│  │ (webhook   │   │  idempotency) │   │  2. LLM (ambiguous only)│  │
-│  │  verify)   │   └───────────────┘   └───────────┬─────────────┘  │
-│  └────────────┘                                   │                 │
-│         ▲                                          ▼                 │
-│  ┌────────────┐   ┌───────────────┐   ┌─────────────────────────┐  │
-│  │  Slack     │   │  Authz &      │   │    Slack Publisher      │  │
-│  │ Interaction│◀─▶│  Identity     │◀──│  (Block Kit renderer)   │  │
-│  │  Handler   │   │  Mapper       │   └─────────────────────────┘  │
-│  └─────┬──────┘   └───────┬───────┘                                 │
-│        │                  │                                         │
-│        ▼                  ▼                                         │
-│  ┌──────────────────────────────────┐   ┌───────────────────────┐  │
-│  │       GitHub MCP Client          │   │   Scheduler (digests, │  │
-│  │  (reads + scoped writes)         │   │   stale nudges, flaky) │  │
-│  └──────────────────────────────────┘   └───────────────────────┘  │
-│                                                                      │
-│  Store: Postgres (identity map, PR state, flaky-test history, mutes)│
-└────────────────────────────────────────────────────────────────────┘
-        │                          │                        │
-        ▼                          ▼                        ▼
-   GitHub API                 Slack API              LLM (Claude API)
-   (via MCP)                 (Block Kit)          (summaries only)
+### Request flow
+
+```mermaid
+flowchart TD
+    A["GitHub pull request<br/>opened or updated"] -->|webhook| B["Webhook ingest<br/>HMAC verified, queued in Postgres"]
+    B --> C["Async worker<br/>polls queue every 5s"]
+    C --> D{"Triage engine<br/>deterministic rules"}
+    D -->|clear decision| F["Slack interactive card"]
+    D -->|large, unrouted diff| E["Ollama LLM<br/>local PR summary"]
+    E --> F
+    F -->|Approve / Request changes| G["Authorization check<br/>Slack identity to GitHub permission"]
+    G --> H["GitHub MCP executor<br/>JSON-RPC over SSE"]
+    H --> I["GitHub review created"]
+
+    style A fill:#E6F1FB,stroke:#185FA5,color:#042C53
+    style I fill:#E6F1FB,stroke:#185FA5,color:#042C53
+    style B fill:#F1EFE8,stroke:#5F5E5A,color:#2C2C2A
+    style C fill:#F1EFE8,stroke:#5F5E5A,color:#2C2C2A
+    style D fill:#EEEDFE,stroke:#534AB7,color:#26215C
+    style E fill:#FAEEDA,stroke:#854F0B,color:#412402
+    style F fill:#FBEAF0,stroke:#993556,color:#4B1528
+    style G fill:#E1F5EE,stroke:#0F6E56,color:#04342C
+    style H fill:#E1F5EE,stroke:#0F6E56,color:#04342C
 ```
 
-**Stack**
+### System layers
 
-| Layer | Choice |
-|---|---|
-| Language | Go (chi/echo for HTTP, `sqlc`/`pgx` for Postgres) |
-| Integration | GitHub MCP server for all GitHub reads and writes |
-| Slack | Bolt-style HTTP handlers (events, interactivity, shortcuts) |
-| AI | Claude API for summaries and explanations only (called on under 20% of PRs) |
-| Store | Postgres for identity map, PR/label state, flaky-test history, mute/snooze state |
-| Queue | In-process worker pool plus a Postgres-backed job table (or Redis if scaling) |
+```mermaid
+flowchart LR
+    subgraph core["Core pipeline"]
+        direction TB
+        W["Webhook ingest"] --> T["Triage engine"] --> S["Slack publisher"]
+    end
 
----
+    subgraph ai["AI layer"]
+        O["Ollama local LLM summary"]
+    end
 
-## The Triage Engine
+    subgraph ops["Operational layers"]
+        direction TB
+        Sc["Scheduler: stale-PR digest, quiet hours"]
+        Hd["Hardening: retries, DLQ, metrics, Docker, K8s"]
+    end
 
-The engine is intentionally **layered so the cheap, deterministic checks run first** and the LLM is a last resort.
+    core -->|ambiguous PRs only| ai
+    core -.-> ops
 
-**Layer 1 — Deterministic rules (always run, no LLM)**
+    style core fill:#EEEDFE,stroke:#534AB7,color:#26215C
+    style ai fill:#FAEEDA,stroke:#854F0B,color:#412402
+    style ops fill:#F1EFE8,stroke:#5F5E5A,color:#2C2C2A
+```
 
-| Signal | Source | Action |
+## Design principle
+
+> PR Herder follows a **deterministic-first design**: rule-based triage always makes the primary decision. The LLM is only ever asked to summarize a PR the rules couldn't confidently classify — never to route, approve, or decide anything security-relevant. This keeps the system predictable and auditable while still benefiting from AI assistance exactly where it adds value.
+
+This is documented formally as ADR 0001 in the codebase and enforced structurally: the triage engine (`internal/triage`) is a pure, network-free function. The LLM call happens strictly *after* triage, only when `Result.Ambiguous == true`, and its output is attached as a supplementary summary — it never overrides or feeds back into the routing decision.
+
+## Features by layer
+
+| Layer | What it does | Status |
 |---|---|---|
-| Touches sensitive paths | file globs + CODEOWNERS | route to owning team, add `needs-*-review` |
-| Diff size | `additions + deletions` | tag `size/S｜M｜L｜XL` |
-| CI status | check runs | red / green / flaky classification |
-| Contributor status | `author_association` | first-timer → welcome suggestion |
-| Reviewer load | internal state | pick least-loaded eligible reviewer |
+| 0 — Foundation | Domain model, config loading, Postgres schema | Complete |
+| 1 — Webhook ingest | HMAC-verified, idempotent event storage | Complete |
+| 2 — Triage engine | Deterministic size/path/contributor rules | Complete |
+| 3 — Slack publisher | Block Kit triage cards | Complete |
+| 4 — Slack interactivity | Signature-verified button actions | Complete |
+| 5 — GitHub MCP | JSON-RPC client over SSE, real GitHub actions | Complete |
+| 6 — Flaky CI detection | Statistical classifier over check-run history | Complete |
+| 7 — LLM summary | Local Ollama backend, ambiguous PRs only | Complete |
+| 8 — Scheduler | Daily stale-PR digest, quiet hours | Complete |
+| 9 — Production hardening | Retries, DLQ, metrics, health probes, Docker, Kubernetes | Complete |
 
-**Layer 2 — Flaky-CI classifier (statistical, no LLM)**
+## Tech stack
 
-Tracks per-test pass/fail history. A failing check with a *fail-then-pass on retry* rate above a threshold is marked **flaky**, so a red X doesn't block a mergeable PR.
+- **Language:** Go 1.25
+- **Database:** PostgreSQL 16
+- **Messaging:** Slack Block Kit + Events API
+- **Integration:** GitHub MCP Server (JSON-RPC 2.0 over Server-Sent Events)
+- **AI:** Ollama (local inference, `llama3.2:3b`)
+- **Observability:** Prometheus metrics, structured JSON logging (`slog`)
+- **Deployment:** Docker (multi-stage, distroless), Kubernetes manifests
 
-**Layer 3 — LLM summary (only if ambiguous)**
-
-When rules can't confidently classify (for example, a large mixed diff with no CODEOWNERS match), Claude produces a **short, factual summary and suggested labels** — presented as *suggestions the maintainer confirms*, never auto-applied to security routing.
-
-> **Why this matters for judging:** it demonstrates real engineering judgment — cost, determinism, auditability — rather than "call the LLM on everything," which lifts the *Technological Implementation* score.
-
----
-
-## Security and Authorization Model
-
-This is the part that turns a demo into something a real org would install.
-
-**1. Inbound verification**
-- Every GitHub webhook is verified with the `X-Hub-Signature-256` HMAC.
-- Every Slack request is verified with the Slack signing secret plus a timestamp check (replay protection).
-
-**2. Identity mapping**
-- A Slack user can only act after being mapped to a GitHub identity via a one-time OAuth link.
-- The mapping is stored server-side; a Slack ID alone can never trigger a GitHub write.
-
-**3. Scoped authorization on every mutating action**
-- Before any approve, label, or merge, PR Herder checks the mapped GitHub user actually has **write access to that specific repo**.
-- Actions execute with **per-user scoped tokens** or a **GitHub App installation token scoped to the minimum permission** — never a shared god-token.
-
-**4. Approval gate**
-- Mutating actions can require a second confirmation for high-impact operations such as merge.
-
-**5. Secret hygiene**
-- The GitHub App private key, Slack signing secret, and OAuth tokens live in a secret manager or environment — never in code or logs.
-
-**6. Least-privilege data**
-- Contributor "first-timer" status comes only from GitHub's public `author_association` field — nothing scraped or inferred about individuals.
-
----
-
-## Getting Started
+## Getting started
 
 ### Prerequisites
 
-- Go 1.22+
-- Postgres 14+
-- A Slack workspace (use a **developer sandbox** for testing — see hackathon rules)
-- A GitHub App (for webhooks and scoped tokens)
-- Access to the GitHub MCP server
-- A Claude API key
+- Go 1.25+
+- Docker
+- [Ollama](https://ollama.com) with a model pulled (`ollama pull llama3.2:3b`)
+- A Slack app with a bot token and signing secret
+- A GitHub personal access token with `repo` scope
 
-### Quick start
+### Local setup
 
 ```bash
-git clone https://github.com/<you>/pr-herder.git
-cd pr-herder
-cp .env.example .env        # fill in the values below
-make migrate                # run DB migrations
-make run                    # starts the service on :8080
+git clone https://github.com/shreyaabaranwal/PR-Herder.git
+cd PR-Herder
+cp .env.example .env   # fill in your real values
+
+docker run -d --name prherder-pg \
+  -e POSTGRES_USER=prherder -e POSTGRES_PASSWORD=prherder -e POSTGRES_DB=prherder \
+  -p 5432:5432 postgres:16
+
+for f in migrations/*.sql; do
+  psql postgres://prherder:prherder@localhost:5432/prherder -f "$f"
+done
+
+go run cmd/prherder/main.go
 ```
 
-Then expose `:8080` publicly (for example, `ngrok http 8080`) and point your GitHub App webhook and Slack event/interactivity URLs at it.
-
----
+Expose it to GitHub with a tunnel (e.g. `ngrok http 8090`) and point your repo's webhook at `<tunnel-url>/github/webhook`.
 
 ## Configuration
 
-`.env.example`
+All configuration is environment-driven — see `.env.example` for the full list. Key variables:
 
-```env
-# Server
-PORT=8080
-PUBLIC_URL=https://your-tunnel.ngrok.app
-
-# Postgres
-DATABASE_URL=postgres://user:pass@localhost:5432/prherder?sslmode=disable
-
-# Slack
-SLACK_BOT_TOKEN=xoxb-...
-SLACK_SIGNING_SECRET=...
-SLACK_DEFAULT_CHANNEL=C0123456789
-
-# GitHub App
-GITHUB_APP_ID=...
-GITHUB_APP_PRIVATE_KEY_PATH=./github-app.pem
-GITHUB_WEBHOOK_SECRET=...
-
-# GitHub MCP
-GITHUB_MCP_URL=https://mcp.github.com/...
-
-# LLM (summaries only)
-ANTHROPIC_API_KEY=sk-ant-...
-
-# Behavior
-STALE_PR_DAYS=7
-DIGEST_HOUR_LOCAL=9
-QUIET_HOURS=22-08
-```
-
----
-
-## Slack App Manifest
-
-Minimal manifest to register the app (adjust scopes to your needs):
-
-```yaml
-display_information:
-  name: PR Herder
-features:
-  bot_user:
-    display_name: pr-herder
-    always_online: true
-oauth_config:
-  scopes:
-    bot:
-      - chat:write
-      - commands
-      - channels:read
-      - users:read
-      - im:write
-settings:
-  event_subscriptions:
-    request_url: https://your-tunnel.ngrok.app/slack/events
-    bot_events:
-      - app_mention
-  interactivity:
-    is_enabled: true
-    request_url: https://your-tunnel.ngrok.app/slack/interact
-  org_deploy_enabled: false
-  socket_mode_enabled: false
-```
-
----
-
-## GitHub MCP Tools Used
-
-| Purpose | Direction | Notes |
-|---|---|---|
-| List / get pull requests | read | powers the feed |
-| Get PR files and diff stats | read | diff-size and path rules |
-| Get check runs / CI status | read | flaky detection |
-| Get CODEOWNERS | read | routing |
-| Add labels | write | scoped, authorized |
-| Submit review (approve / request changes) | write | scoped, authorized, gated |
-| Request reviewers | write | load-balancer |
-| Post PR comment | write | opt-in contributor help |
-
-All writes flow through the authorization layer described above.
-
----
-
-## Local Development
-
-```bash
-make migrate        # apply DB migrations
-make run            # run the service with values from .env
-make test           # unit tests (triage rules, authz, flaky classifier)
-make lint           # golangci-lint
-```
-
-Suggested package layout:
-
-```
-cmd/prherder/            # main
-internal/ingest/         # webhook verify + queue
-internal/triage/         # deterministic rules + flaky classifier
-internal/llm/            # Claude summary client (ambiguous PRs only)
-internal/slackui/        # Block Kit rendering + interactions
-internal/authz/          # identity map + scoped authorization
-internal/githubmcp/      # MCP client wrapper
-internal/scheduler/      # digests, stale nudges
-internal/store/          # Postgres (sqlc-generated)
-```
-
----
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | Postgres connection string |
+| `SLACK_BOT_TOKEN` / `SLACK_SIGNING_SECRET` | Slack app credentials |
+| `GITHUB_WEBHOOK_SECRET` / `GITHUB_READ_TOKEN` | GitHub webhook + API access |
+| `GITHUB_MCP_URL` | GitHub MCP server endpoint |
+| `OLLAMA_URL` / `OLLAMA_MODEL` | Local LLM backend |
+| `STALE_PR_DAYS` / `DIGEST_HOUR_LOCAL` / `QUIET_HOURS` | Scheduler behavior |
 
 ## Deployment
 
-- **Container** — ship as a single Go binary in a distroless image.
-- **Runtime** — any container host (Cloud Run, Fly.io, ECS, Kubernetes).
-- **Database** — managed Postgres.
-- **Secrets** — a secret manager, never env files in production.
-- **Scaling** — the service is stateless, so scale horizontally; the Postgres job table gives at-least-once processing with idempotency keys.
+### Docker
 
----
+```bash
+docker build -t prherder:latest .
+docker run --env-file .env -p 8090:8090 prherder:latest
+```
 
-## Roadmap
+### Kubernetes
 
-- [x] PR triage (deterministic rules)
-- [x] Slack Block Kit cards and actions
-- [x] Scoped authorization and identity mapping
-- [x] Flaky-CI detection
-- [x] Batched stale-PR digests
-- [ ] Reviewer load-balancer v2 (expertise-weighted)
-- [ ] Multi-repo and org-wide install
-- [ ] "Explain this PR to me" thread command
-- [ ] Slack Marketplace submission
+```bash
+kubectl apply -f k8s/namespace.yaml
+kubectl create secret generic prherder-secrets --namespace=pr-herder --from-env-file=.env
+kubectl apply -f k8s/configmap.yaml -f k8s/postgres.yaml -f k8s/deployment.yaml -f k8s/service.yaml
+```
 
----
+Liveness and readiness probes are wired to `/livez` and `/readyz`; Prometheus can scrape `/metrics` directly off the pod (annotations already included in `k8s/deployment.yaml`).
 
-## Contributing
+## Observability
 
-PR Herder is open source and built in public. First-time contributors are welcome — good first issues are labeled `good-first-issue`. Please read `CONTRIBUTING.md` before opening a PR.
+- **Health:** `/healthz`, `/livez`, `/readyz` (readiness checks live Postgres connectivity)
+- **Metrics:** `/metrics` — Prometheus format, covering webhook throughput, triage duration, LLM outcomes, Slack publish outcomes, worker errors, and dead-letter counts
+- **Logging:** structured JSON via `slog`, with `delivery_id` correlation across the full request lifecycle
+- **Reliability:** exponential-backoff retries on LLM/Slack calls, plus a cross-cycle dead-letter queue so a permanently broken event stops retrying after 5 attempts instead of looping forever
 
----
+## Project structure
+
+```
+cmd/prherder/         entrypoint, wires every layer together
+internal/
+  domain/              canonical PR model, decoupled from GitHub's wire format
+  ingest/              webhook handler + async worker
+  triage/              deterministic rule engine
+  llm/                 Gemini + Ollama backends behind one interface
+  slackui/             Block Kit publisher + interaction handler
+  githubmcp/           MCP client, JSON-RPC over SSE
+  authz/               permission checks before any GitHub write
+  scheduler/           stale-PR digest, quiet hours
+  store/               all SQL lives here
+  metrics/             Prometheus counters and histograms
+  httpmw/              panic-recovery middleware
+migrations/            versioned schema, applied in order
+k8s/                   Kubernetes manifests
+```
+
+
+<div align="center">
+
+## Team : Vitamin She
+
+</div>
+
 
 ## License
 
-MIT © 2026 &lt;your Shreya Baranwal / Vitamin She&gt;
+See [LICENSE](./LICENSE).
+
+---
+
+<div align="center">
+
+**PR Herder** — never leave Slack to ship a review.
+
+</div>

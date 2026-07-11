@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: prherder-pg-docker
+    environment:
+      POSTGRES_USER: prherder
+      POSTGRES_PASSWORD: prherder
+      POSTGRES_DB: prherder
+    ports:
+      - "5432:5432"
+    volumes:
+      - prherder-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prherder"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  prherder:
+    build: .
+    container_name: prherder-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8090:8090"
+    environment:
+      PORT: 8090
+      DATABASE_URL: postgres://prherder:prherder@postgres:5432/prherder?sslmode=disable
+      # Ollama runs on the host, not in this compose file -- point at
+      # host.docker.internal so the container can reach it. On Linux,
+      # this requires the extra_hosts entry below (Docker Desktop on
+      # Mac/Windows resolves it automatically).
+      OLLAMA_URL: http://host.docker.internal:11434
+      OLLAMA_MODEL: llama3.2:3b
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - .env
+
+volumes:
+  prherder-pg-data:

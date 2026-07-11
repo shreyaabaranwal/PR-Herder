@@ -5,6 +5,7 @@
 package llm
 
 import (
+	"time"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -25,7 +26,7 @@ func NewOllamaClient(baseURL, model string) *OllamaClient {
 	return &OllamaClient{
 		baseURL:    baseURL,
 		model:      model,
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 

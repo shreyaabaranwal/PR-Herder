@@ -13,6 +13,7 @@ import (
 	"github.com/shreyaabaranwal/pr-herder/internal/config"
 	"github.com/shreyaabaranwal/pr-herder/internal/ingest"
 	"github.com/shreyaabaranwal/pr-herder/internal/llm"
+	"github.com/shreyaabaranwal/pr-herder/internal/scheduler"
 	"github.com/shreyaabaranwal/pr-herder/internal/slackui"
 	"github.com/shreyaabaranwal/pr-herder/internal/store"
 	"github.com/shreyaabaranwal/pr-herder/internal/triage"
@@ -98,6 +99,22 @@ worker := ingest.NewWorker(
 	log,
 )
 	go worker.Run(ctx, 5*time.Second)
+
+	// Layer 8: independent of the real-time webhook->triage->Slack path --
+	// reads whichever repos webhook_events has ever seen (store.GetDistinctRepos)
+	// and polls GitHub directly for stale open PRs, once daily at
+	// cfg's configured digest hour, skipping quiet hours.
+	sched := scheduler.NewScheduler(
+		db,
+		mcpClient,
+		publisher,
+		log,
+		cfg.DigestHourLocal,
+		cfg.StaleDaysThreshold,
+		cfg.QuietHoursStart,
+		cfg.QuietHoursEnd,
+	)
+	go sched.Run(ctx)
 
 	<-ctx.Done()
 	log.Info("shutting down")

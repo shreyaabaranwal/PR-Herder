@@ -4,6 +4,7 @@
 package githubmcp
 
 import (
+	"time"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -22,7 +23,7 @@ func NewClient(baseURL, token string) *Client {
 	return &Client{
 		baseURL:    baseURL,
 		token:      token,
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: 15 * time.Second},
 	}
 }
 

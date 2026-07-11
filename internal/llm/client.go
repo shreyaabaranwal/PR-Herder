@@ -5,6 +5,7 @@
 package llm
 
 import (
+	"time"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -28,7 +29,7 @@ func NewClient(apiKey, model string) *Client {
 	return &Client{
 		apiKey:     apiKey,
 		model:      model,
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 

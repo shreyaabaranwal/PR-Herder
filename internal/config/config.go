@@ -33,6 +33,11 @@ type Config struct {
 
 	AnthropicAPIKey string
 	GeminiAPIKey    string
+    
+	OllamaURL   string
+    OllamaModel string
+
+
 
 	StaleDaysThreshold int
 	DigestHourLocal    int
@@ -65,6 +70,8 @@ func Load() (*Config, error) {
 
 		
 		GeminiAPIKey:    os.Getenv("GEMINI_API_KEY"),
+		OllamaURL:   getOr("OLLAMA_URL", "http://localhost:11434"),
+        OllamaModel: getOr("OLLAMA_MODEL", "llama3.2:3b"),
 	}
 	var err error
 	cfg.StaleDaysThreshold, err = getInt("STALE_PR_DAYS", 7)

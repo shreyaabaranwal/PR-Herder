@@ -1,4 +1,4 @@
-// Package domain holds PR Herder's internal model of the world.
+  // Package domain holds PR Herder's internal model of the world.
 //
 // Deliberately independent of GitHub's webhook JSON shape and of Slack's
 // Block Kit shape. GitHub's payload has nullable fields, deprecated fields,

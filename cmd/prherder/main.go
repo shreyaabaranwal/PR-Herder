@@ -83,10 +83,20 @@ authorizer := authz.NewAuthorizer(db, cfg.GitHubReadToken)
 	// Layer 7: local Ollama backend -- no billing/quota dependency (see
 	// ADR follow-up re: Gemini free-tier requiring billing as of 2026).
 	// Model must already be pulled: `ollama pull llama3.2:3b`.
-	ollamaClient := llm.NewOllamaClient("http://localhost:11434", "llama3.2:3b")
+ollamaClient := llm.NewOllamaClient(
+    cfg.OllamaURL,
+    cfg.OllamaModel,
+)
 	summarizer := llm.NewSummarizer(ollamaClient)
 
-	worker := ingest.NewWorker(db, triageEngine, publisher, summarizer, log)
+worker := ingest.NewWorker(
+	db,
+	triageEngine,
+	publisher,
+	mcpClient,
+	summarizer,
+	log,
+)
 	go worker.Run(ctx, 5*time.Second)
 
 	<-ctx.Done()

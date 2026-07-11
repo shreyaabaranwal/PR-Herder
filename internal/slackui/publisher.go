@@ -40,11 +40,26 @@ type slackResponse struct {
 // configured default channel.
 func (p *Publisher) PublishTriageCard(ctx context.Context, result triage.Result) error {
 	blocks := BuildTriageCardBlocks(result)
+	text := fmt.Sprintf("PR #%d triaged: %s", result.PR.Number, result.PR.Title)
+	return p.send(ctx, blocks, text)
+}
 
+// PublishBlocks posts arbitrary pre-built Block Kit blocks to the
+// configured default channel -- used by Layer 8's scheduler for the
+// stale-PR digest, which isn't shaped like a triage.Result. Satisfies
+// scheduler.Publisher.
+func (p *Publisher) PublishBlocks(ctx context.Context, blocks []map[string]any) error {
+	return p.send(ctx, blocks, "PR Herder digest")
+}
+
+// send is the shared chat.postMessage call -- both PublishTriageCard and
+// PublishBlocks post to the same channel via the same auth, they only
+// differ in what blocks/fallback text they send.
+func (p *Publisher) send(ctx context.Context, blocks []map[string]any, fallbackText string) error {
 	payload := map[string]any{
 		"channel": p.defaultChannel,
 		"blocks":  blocks,
-		"text":    fmt.Sprintf("PR #%d triaged: %s", result.PR.Number, result.PR.Title),
+		"text":    fallbackText, // shown in notifications/unfurls where blocks don't render
 	}
 
 	body, err := json.Marshal(payload)

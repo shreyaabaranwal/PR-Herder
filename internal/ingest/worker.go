@@ -10,7 +10,8 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
-
+     
+	"github.com/shreyaabaranwal/pr-herder/internal/githubmcp"
 	"github.com/shreyaabaranwal/pr-herder/internal/domain"
 	"github.com/shreyaabaranwal/pr-herder/internal/llm"
 	"github.com/shreyaabaranwal/pr-herder/internal/slackui"
@@ -23,6 +24,7 @@ type Worker struct {
 	store      *store.Store
 	engine     *triage.Engine
 	publisher  *slackui.Publisher
+	github *githubmcp.Client
 	summarizer *llm.Summarizer
 	log        *slog.Logger
 }
@@ -31,14 +33,22 @@ type Worker struct {
 // summary rather than the worker failing. This keeps Layer 7 optional:
 // the pipeline (Layers 0-6) works fully even if no LLM backend is wired
 // in main.go.
-func NewWorker(s *store.Store, engine *triage.Engine, publisher *slackui.Publisher, summarizer *llm.Summarizer, log *slog.Logger) *Worker {
+func NewWorker(
+	s *store.Store,
+	engine *triage.Engine,
+	publisher *slackui.Publisher,
+	github *githubmcp.Client,
+	summarizer *llm.Summarizer,
+	log *slog.Logger,
+) *Worker{
 	return &Worker{
-		store:      s,
-		engine:     engine,
-		publisher:  publisher,
-		summarizer: summarizer,
-		log:        log,
-	}
+	store: s,
+	engine: engine,
+	publisher: publisher,
+	github: github,
+	summarizer: summarizer,
+	log: log,
+}
 }
 
 // Run polls forever at the given interval until ctx is cancelled. Each
@@ -98,14 +108,46 @@ func (w *Worker) processOne(ctx context.Context, ev store.UnprocessedEvent) erro
 	}
 
 	pr, ok := buildPullRequestFromPayload(ev)
-	if !ok {
-		w.log.Warn("could not extract PR data from payload, skipping",
-			"delivery_id", ev.DeliveryID)
-		return nil
+if !ok {
+	w.log.Warn(
+		"could not extract PR data from payload, skipping",
+		"delivery_id", ev.DeliveryID,
+	)
+	return nil
+}
+
+// Layer 7: enrich the PR with the real changed file list before
+// deterministic triage and LLM summarization.
+files, err := w.github.GetPullRequestFiles(
+	ctx,
+	pr.RepoOwner,
+	pr.RepoName,
+	pr.Number,
+)
+
+if err != nil {
+	w.log.Warn(
+		"failed to fetch changed files from GitHub MCP",
+		"repo", pr.RepoOwner+"/"+pr.RepoName,
+		"pr", pr.Number,
+		"err", err,
+	)
+} else {
+	changedFiles := make([]string, 0, len(files))
+	for _, f := range files {
+		changedFiles = append(changedFiles, f.Filename)
 	}
+	pr.ChangedFiles = changedFiles
+	w.log.Info(
+    "loaded changed files",
+    "repo", pr.RepoOwner+"/"+pr.RepoName,
+    "pr", pr.Number,
+    "count", len(changedFiles),
+    "files", changedFiles,
+)
+}
 
-	result := w.engine.Triage(pr)
-
+result := w.engine.Triage(pr)
 	// Layer 7: only ambiguous PRs get an LLM summary (ADR 0001). A
 	// summarizer failure here is logged, not fatal -- the Slack card
 	// still gets published without a summary rather than losing the

@@ -7,10 +7,7 @@ import (
 	"github.com/shreyaabaranwal/pr-herder/internal/triage"
 )
 
-// RecordCheckRun appends one check-run observation to history. Called
-// each time ingest processes a check_run webhook event (Layer 1's
-// eventsWeCareAbout map already reserves "check_run"/"check_suite" for
-// this -- currently disabled there until this write path existed).
+
 func (s *Store) RecordCheckRun(ctx context.Context, repoOwner, repoName string, prNumber int, checkName, commitSHA, conclusion string) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO check_run_history
@@ -23,12 +20,7 @@ func (s *Store) RecordCheckRun(ctx context.Context, repoOwner, repoName string, 
 	return nil
 }
 
-// GetCheckRunHistory retrieves a check's history for the flaky
-// classifier, oldest-first (ClassifyFlaky's commit-grouping logic
-// assumes chronological order). Limited to a bounded window (not "all
-// history ever") since flaky-ness is a recent-behavior signal --
-// something flaky a year ago and fixed since shouldn't still show as
-// flaky today.
+
 func (s *Store) GetCheckRunHistory(ctx context.Context, repoOwner, repoName, checkName string, limit int) ([]triage.CheckRunObservation, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT commit_sha, conclusion

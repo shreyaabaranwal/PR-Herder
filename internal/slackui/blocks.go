@@ -6,10 +6,6 @@ import (
 	"github.com/shreyaabaranwal/pr-herder/internal/triage"
 )
 
-// BuildTriageCardBlocks renders a triage.Result as a Slack Block Kit
-// payload. Layer 4 added real interactivity — action buttons whose
-// value encodes "owner/repo#number", matching what
-// interactions.go's parseActionValue expects.
 func BuildTriageCardBlocks(result triage.Result) []map[string]any {
 	pr := result.PR
 
@@ -62,10 +58,7 @@ func BuildTriageCardBlocks(result triage.Result) []map[string]any {
 		},
 	}
 
-	// Layer 7: only populated for Ambiguous PRs where the LLM summary
-	// succeeded (see ingest/worker.go). Rendered as its own section,
-	// clearly labeled, so maintainers know it's a generated summary and
-	// not a human-written description.
+
 	if result.Summary != "" {
 		blocks = append(blocks, map[string]any{
 			"type": "section",
@@ -92,10 +85,6 @@ func BuildTriageCardBlocks(result triage.Result) []map[string]any {
 		})
 	}
 
-	// actionValue encodes "owner/repo#number" — the exact format
-	// interactions.go's parseActionValue expects. Kept as a local helper
-	// here so the encoding logic lives in exactly one place per direction
-	// (encode here, decode in interactions.go) rather than scattered.
 	actionValue := fmt.Sprintf("%s/%s#%d", pr.RepoOwner, pr.RepoName, pr.Number)
 
 	blocks = append(blocks, map[string]any{

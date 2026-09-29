@@ -9,16 +9,11 @@ import (
 	"testing"
 )
 
-// fakeGitHubServer spins up a local HTTP server that mimics GitHub's
-// collaborator-permission endpoint, keyed by username. This avoids any
-// real network call in tests.
+
 func fakeGitHubServer(t *testing.T, permissionsByUser map[string]string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Path shape: /repos/{owner}/{repo}/collaborators/{username}/permission
-		// Splitting on "/" and taking the second-to-last segment is more
-		// robust than manual slicing — it doesn't depend on "permission"
-		// being a fixed length or assume no trailing slash.
+
 		segments := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 		if len(segments) < 2 {
 			w.WriteHeader(http.StatusNotFound)

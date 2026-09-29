@@ -10,7 +10,7 @@
 ```bash
 kubectl apply -f k8s/namespace.yaml
 
-# Create secrets with real values (never commit real secrets to k8s/secret.yaml)
+
 kubectl create secret generic prherder-secrets \
   --namespace=pr-herder \
   --from-literal=SLACK_BOT_TOKEN=xoxb-... \

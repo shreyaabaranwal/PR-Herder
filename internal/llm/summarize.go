@@ -6,10 +6,7 @@ import (
 	"strings"
 )
 
-// PRSummaryInput is the minimal PR data needed to generate a summary --
-// decoupled from domain.PullRequest so this package doesn't need to
-// import domain just to describe what it needs (title, size, changed
-// files are all that matter for a useful summary).
+
 type PRSummaryInput struct {
 	Title        string
 	Body         string
@@ -17,14 +14,12 @@ type PRSummaryInput struct {
 	Deletions    int
 	ChangedFiles []string
 }
-// Generator is anything that can turn a prompt into text -- Gemini and
-// Ollama both satisfy this, so Summarizer doesn't care which backend
-// is wired up.
+
 type Generator interface {
 	Generate(ctx context.Context, prompt string) (string, error)
 }
 
-// Summarizer wraps a Generator with PR-Herder-specific prompt construction.
+
 type Summarizer struct {
 	client Generator
 }
@@ -33,12 +28,7 @@ func NewSummarizer(client Generator) *Summarizer {
 	return &Summarizer{client: client}
 }
 
-// Summarize produces a short, factual summary of an ambiguous PR (per
-// ADR 0001 -- only called when triage.Result.Ambiguous is true). The
-// prompt is deliberately restrictive: no routing/label suggestions, no
-// opinions on whether to merge -- just "what does this PR do," since
-// that's the one thing deterministic rules couldn't confidently
-// determine on their own.
+
 func (s *Summarizer) Summarize(ctx context.Context, input PRSummaryInput) (string, error) {
 	prompt := buildSummaryPrompt(input)
 
@@ -63,10 +53,7 @@ func buildSummaryPrompt(input PRSummaryInput) string {
 		body = "(no description provided)"
 	}
 
-	// The prompt is explicit about scope on purpose: a maintainer reading
-	// this summary needs to trust it's describing the change, not
-	// recommending an action. Keeping the model's output to 2-3 sentences
-	// also keeps it fitting cleanly inside a Slack Block Kit section.
+
 	return fmt.Sprintf(`You are summarizing a GitHub pull request for a maintainer who hasn't read the diff yet.
 
 Write a short, factual summary in 2-3 sentences: what does this PR change and why (if stated). Do not recommend whether to approve, merge, or request changes. Do not suggest labels. Just describe what the PR does.

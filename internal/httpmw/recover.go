@@ -1,5 +1,4 @@
-// Package httpmw holds small, dependency-free HTTP middleware shared
-// across all of PR Herder's handlers.
+
 package httpmw
 
 import (
@@ -7,10 +6,7 @@ import (
 	"net/http"
 )
 
-// Recover wraps a handler so a panic inside it (malformed payload,
-// nil-pointer on an unexpected field, etc.) logs and returns 500
-// instead of crashing the whole process -- taking the webhook endpoint,
-// worker, and scheduler down with it.
+
 func Recover(log *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {

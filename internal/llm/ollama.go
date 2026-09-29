@@ -1,7 +1,4 @@
-// Package llm: Ollama backend -- local, free, no quota/billing gate.
-// Satisfies the same Generator interface as the Gemini Client, so
-// Summarizer works unchanged regardless of which backend is wired in
-// main.go.
+
 package llm
 
 import (
@@ -20,8 +17,6 @@ type OllamaClient struct {
 	httpClient *http.Client
 }
 
-// NewOllamaClient builds a client against a local (or remote) Ollama
-// server. baseURL is typically "http://localhost:11434".
 func NewOllamaClient(baseURL, model string) *OllamaClient {
 	return &OllamaClient{
 		baseURL:    baseURL,
@@ -45,7 +40,7 @@ func (c *OllamaClient) Generate(ctx context.Context, prompt string) (string, err
 	reqBody := ollamaGenerateRequest{
 		Model:  c.model,
 		Prompt: prompt,
-		Stream: false, // single JSON object back, matches Gemini client's shape
+		Stream: false, 
 	}
 
 	body, err := json.Marshal(reqBody)

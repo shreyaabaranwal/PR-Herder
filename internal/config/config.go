@@ -1,9 +1,4 @@
 
-// Package config centralizes environment loading. Nothing else in the
-// codebase should call os.Getenv directly — that pattern scatters
-// "what env vars does this service need?" across every package and makes
-// missing-config failures show up at runtime, deep in some unrelated code
-// path, instead of at startup where they're cheap to diagnose.
 package config
 
 import (
@@ -45,12 +40,9 @@ type Config struct {
 	QuietHoursEnd      int
 }
 
-// Load reads .env (if present — fine if it's missing in real prod, where
-// secrets come from the environment/secret-manager instead) and then
-// requires every field below to be set. Returns an error rather than
-// panicking so cmd/prherder can log a clean fatal message.
+
 func Load() (*Config, error) {
-	_ = godotenv.Load() // ignore error: .env is optional (e.g. absent in prod containers)
+	_ = godotenv.Load() 
 
 	cfg := &Config{
 		Port:      getOr("PORT", "8080"),
@@ -86,8 +78,6 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
-	// Layer 1 only truly needs these two to boot. As later layers land,
-	// add their required vars here — fail at startup, not at first use.
 	required := map[string]string{
 		"DATABASE_URL":          cfg.DatabaseURL,
 		"GITHUB_WEBHOOK_SECRET": cfg.GitHubWebhookSecret,

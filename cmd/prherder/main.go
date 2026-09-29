@@ -48,7 +48,7 @@ func main() {
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	// /livez: process is up and serving HTTP -- doesn't check dependencies.
+
 	mux.HandleFunc("/livez", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
@@ -69,11 +69,7 @@ func main() {
 	webhookHandler := ingest.NewHandler(cfg.GitHubWebhookSecret, db, log)
 	mux.Handle("/github/webhook", webhookHandler)
 
-	// Layer 4: Slack interactivity. The Authorizer needs a GitHub token
-	// with read access to check collaborator permissions — for now this
-	// reuses GITHUB_WEBHOOK_SECRET's absence as a signal to skip wiring
-	// cleanly; a real deployment needs a separate token with repo read
-	// scope, tracked as a Layer 5 config addition.
+	
 	authorizer := authz.NewAuthorizer(db, cfg.GitHubReadToken)
 	mcpClient := githubmcp.NewClient(cfg.GitHubMCPURL, cfg.GitHubReadToken)
 	executor := githubmcp.NewExecutor(mcpClient)
@@ -94,18 +90,11 @@ func main() {
 		}
 	}()
 
-	// Layer 6: async worker draining webhook_events into triaged Slack
-	// cards. Runs alongside the HTTP server, polling rather than being
-	// triggered directly by the webhook handler -- keeps the fast-ack
-	// guarantee in webhook.go's ServeHTTP intact (see that file's doc
-	// comment): a slow triage run here can never cause GitHub to see a
-	// webhook timeout.
+
 	triageEngine := triage.NewEngine()
 	publisher := slackui.NewPublisher(cfg.SlackBotToken, cfg.SlackDefaultChan)
 
-	// Layer 7: local Ollama backend -- no billing/quota dependency (see
-	// ADR follow-up re: Gemini free-tier requiring billing as of 2026).
-	// Model must already be pulled: `ollama pull llama3.2:3b`.
+
 	ollamaClient := llm.NewOllamaClient(
 		cfg.OllamaURL,
 		cfg.OllamaModel,
@@ -122,10 +111,6 @@ func main() {
 	)
 	go worker.Run(ctx, 5*time.Second)
 
-	// Layer 8: independent of the real-time webhook->triage->Slack path --
-	// reads whichever repos webhook_events has ever seen (store.GetDistinctRepos)
-	// and polls GitHub directly for stale open PRs, once daily at
-	// cfg's configured digest hour, skipping quiet hours.
 	sched := scheduler.NewScheduler(
 		db,
 		mcpClient,

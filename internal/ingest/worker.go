@@ -1,8 +1,4 @@
-// Package ingest's worker is the async processor that turns stored
-// webhook_events rows into triaged Slack cards. It is deliberately
-// separate from the HTTP handler in webhook.go: the handler's only job
-// is fast-ack (verify, store, return), so a slow or buggy triage run can
-// never cause GitHub to see a timeout and start retry-storming us.
+
 package ingest
 
 import (
@@ -20,7 +16,7 @@ import (
 	"github.com/shreyaabaranwal/pr-herder/internal/triage"
 )
 
-// Worker polls webhook_events for unprocessed rows and triages them.
+
 type Worker struct {
 	store      *store.Store
 	engine     *triage.Engine
@@ -30,10 +26,7 @@ type Worker struct {
 	log        *slog.Logger
 }
 
-// summarizer may be nil -- if so, ambiguous PRs are published without a
-// summary rather than the worker failing. This keeps Layer 7 optional:
-// the pipeline (Layers 0-6) works fully even if no LLM backend is wired
-// in main.go.
+
 func NewWorker(
 	s *store.Store,
 	engine *triage.Engine,
@@ -52,10 +45,6 @@ func NewWorker(
 	}
 }
 
-// Run polls forever at the given interval until ctx is cancelled. Each
-// tick processes up to a bounded batch (see processBatch) rather than
-// draining the whole backlog in one tick -- keeps any single tick's
-// duration predictable even if a large backlog builds up.
 func (w *Worker) Run(ctx context.Context, pollInterval time.Duration) {
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -104,10 +93,6 @@ func (w *Worker) processBatch(ctx context.Context) error {
 	return nil
 }
 
-// processOne triages a single webhook event and, if it's PR-scoped,
-// publishes a triage card to Slack. Non-PR events (or events missing a
-// PR number) are treated as a no-op success -- there's nothing to
-// triage, not an error.
 func (w *Worker) processOne(ctx context.Context, ev store.UnprocessedEvent) error {
 	start := time.Now()
 	defer func() {
@@ -130,8 +115,7 @@ func (w *Worker) processOne(ctx context.Context, ev store.UnprocessedEvent) erro
 		return nil
 	}
 
-	// Layer 7: enrich the PR with the real changed file list before
-	// deterministic triage and LLM summarization.
+	
 	files, err := w.github.GetPullRequestFiles(
 		ctx,
 		pr.RepoOwner,
@@ -162,10 +146,7 @@ func (w *Worker) processOne(ctx context.Context, ev store.UnprocessedEvent) erro
 	}
 
 	result := w.engine.Triage(pr)
-	// Layer 7: only ambiguous PRs get an LLM summary (ADR 0001). A
-	// summarizer failure here is logged, not fatal -- the Slack card
-	// still gets published without a summary rather than losing the
-	// whole triage result over an LLM hiccup.
+
 	if result.Ambiguous && w.summarizer != nil {
 		var summary string
 		sumErr := withRetry(ctx, 3, func() error {
@@ -205,11 +186,7 @@ func (w *Worker) processOne(ctx context.Context, ev store.UnprocessedEvent) erro
 	return nil
 }
 
-// buildPullRequestFromPayload translates a raw GitHub webhook payload
-// into domain.PullRequest -- the anti-corruption-layer boundary this
-// package owns (see extract.go's doc comment for the same principle
-// applied to routing info). Only pull_request-shaped payloads are
-// supported; other event types return ok=false.
+
 func buildPullRequestFromPayload(ev store.UnprocessedEvent) (domain.PullRequest, bool) {
 	prData, ok := ev.RawPayload["pull_request"].(map[string]any)
 	if !ok {
@@ -246,13 +223,6 @@ func buildPullRequestFromPayload(ev store.UnprocessedEvent) (domain.PullRequest,
 		baseBranch, _ = base["ref"].(string)
 	}
 
-	// changed_files is NOT present in the webhook payload itself --
-	// GitHub's pull_request event doesn't include the file list. This is
-	// a known gap: triage rules that depend on ChangedFiles (sensitive
-	// path matching) won't fire correctly until a Layer 5 follow-up
-	// fetches files via githubmcp.GetPullRequestFiles before calling
-	// Triage(). Tracked here rather than silently producing wrong
-	// results.
 	return domain.PullRequest{
 		RepoOwner:    ev.RepoOwner,
 		RepoName:     ev.RepoName,

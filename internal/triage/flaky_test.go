@@ -30,9 +30,9 @@ func TestClassifyFlaky(t *testing.T) {
 			name: "fail-then-pass on same commit (retry) marks flaky",
 			observations: []CheckRunObservation{
 				{CommitSHA: "c1", Conclusion: "failure"},
-				{CommitSHA: "c1", Conclusion: "success"}, // retry on same commit
+				{CommitSHA: "c1", Conclusion: "success"}, 
 				{CommitSHA: "c2", Conclusion: "failure"},
-				{CommitSHA: "c2", Conclusion: "success"}, // retry on same commit
+				{CommitSHA: "c2", Conclusion: "success"}, 
 				{CommitSHA: "c3", Conclusion: "success"},
 			},
 			wantFlaky: true,
@@ -43,13 +43,13 @@ func TestClassifyFlaky(t *testing.T) {
 				{CommitSHA: "d1", Conclusion: "failure"},
 				{CommitSHA: "d1", Conclusion: "success"},
 			},
-			wantFlaky: false, // only 1 distinct commit -- below minSampleSize
+			wantFlaky: false, 
 		},
 		{
 			name: "new commit after a failure is not a retry -- no fail-then-pass signal",
 			observations: []CheckRunObservation{
 				{CommitSHA: "e1", Conclusion: "failure"},
-				{CommitSHA: "e2", Conclusion: "success"}, // different commit, not a retry
+				{CommitSHA: "e2", Conclusion: "success"}, 
 				{CommitSHA: "e3", Conclusion: "success"},
 			},
 			wantFlaky: false,

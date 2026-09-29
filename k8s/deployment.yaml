@@ -15,8 +15,7 @@ spec:
       labels:
         app: prherder
       annotations:
-        # Standard Prometheus scrape annotations -- picked up automatically
-        # by most cluster Prometheus setups without extra config.
+     
         prometheus.io/scrape: "true"
         prometheus.io/port: "8090"
         prometheus.io/path: "/metrics"

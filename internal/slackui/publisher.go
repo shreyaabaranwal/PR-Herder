@@ -14,7 +14,7 @@ import (
 
 const slackPostMessageURL = "https://slack.com/api/chat.postMessage"
 
-// Publisher posts triage results to a Slack channel via chat.postMessage.
+
 type Publisher struct {
 	botToken       string
 	defaultChannel string
@@ -29,38 +29,28 @@ func NewPublisher(botToken, defaultChannel string) *Publisher {
 	}
 }
 
-// slackResponse is the minimal shape of chat.postMessage's response.
-// Slack's API always returns HTTP 200 even on failure — the real
-// success/failure signal is the "ok" field, not the status code.
 type slackResponse struct {
 	OK    bool   `json:"ok"`
 	Error string `json:"error"`
 }
 
-// PublishTriageCard posts a triage.Result as a Block Kit message to the
-// configured default channel.
 func (p *Publisher) PublishTriageCard(ctx context.Context, result triage.Result) error {
 	blocks := BuildTriageCardBlocks(result)
 	text := fmt.Sprintf("PR #%d triaged: %s", result.PR.Number, result.PR.Title)
 	return p.send(ctx, blocks, text)
 }
 
-// PublishBlocks posts arbitrary pre-built Block Kit blocks to the
-// configured default channel -- used by Layer 8's scheduler for the
-// stale-PR digest, which isn't shaped like a triage.Result. Satisfies
-// scheduler.Publisher.
+
 func (p *Publisher) PublishBlocks(ctx context.Context, blocks []map[string]any) error {
 	return p.send(ctx, blocks, "PR Herder digest")
 }
 
-// send is the shared chat.postMessage call -- both PublishTriageCard and
-// PublishBlocks post to the same channel via the same auth, they only
-// differ in what blocks/fallback text they send.
+
 func (p *Publisher) send(ctx context.Context, blocks []map[string]any, fallbackText string) error {
 	payload := map[string]any{
 		"channel": p.defaultChannel,
 		"blocks":  blocks,
-		"text":    fallbackText, // shown in notifications/unfurls where blocks don't render
+		"text":    fallbackText,
 	}
 
 	body, err := json.Marshal(payload)

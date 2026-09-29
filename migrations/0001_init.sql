@@ -1,5 +1,3 @@
--- 0001_init.sql
--- Layer 0/1 schema: idempotent webhook ingestion + canonical PR state.
 
 CREATE TABLE IF NOT EXISTS webhook_events (
     id            BIGSERIAL PRIMARY KEY,

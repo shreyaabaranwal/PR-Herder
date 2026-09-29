@@ -1,8 +1,4 @@
-// Package scheduler runs periodic, non-real-time jobs -- currently just
-// the stale-PR digest. Deliberately separate from ingest.Worker: this
-// reads live GitHub state on a timer, it doesn't react to webhook
-// events, so it has no business sharing a poll loop with the real-time
-// path.
+
 package scheduler
 
 import (
@@ -15,10 +11,7 @@ import (
 	"github.com/shreyaabaranwal/pr-herder/internal/store"
 )
 
-// Publisher is the minimal interface Scheduler needs from slackui --
-// kept narrow so this package doesn't depend on slackui's full surface,
-// only "can you publish arbitrary Block Kit blocks." slackui.Publisher
-// satisfies this via its PublishBlocks method.
+
 type Publisher interface {
 	PublishBlocks(ctx context.Context, blocks []map[string]any) error
 }
@@ -34,12 +27,7 @@ type Scheduler struct {
 	quietStart         int
 	quietEnd           int
 
-	// lastDigestDate guards against firing twice in the same calendar
-	// day. In-memory only -- does not survive a process restart. Known
-	// limitation: a restart right at the digest hour could theoretically
-	// cause a duplicate send. Acceptable for now; if it becomes a real
-	// problem, promote this to a Postgres row instead of adding
-	// complexity preemptively.
+
 	lastDigestDate string
 }
 
@@ -62,15 +50,11 @@ func NewScheduler(
 	}
 }
 
-// Run checks once an hour and fires the digest at most once per
-// calendar day, at digestHourLocal. Hourly (not minute-level) polling
-// is intentional -- this job has zero latency requirements, unlike
-// ingest.Worker's 5s poll.
 func (s *Scheduler) Run(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
 
-	s.maybeRunDigest(ctx) // catch the case where digestHourLocal is now, on startup
+	s.maybeRunDigest(ctx) 
 
 	for {
 		select {

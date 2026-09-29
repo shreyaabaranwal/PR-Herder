@@ -1,6 +1,4 @@
-// Package githubmcp wraps GitHub's remote MCP server
-// (https://api.githubcopilot.com/mcp/) — GitHub's official, hosted
-// Model Context Protocol endpoint. All requests are JSON-RPC 2.0 POSTs.
+
 package githubmcp
 
 import (
@@ -51,7 +49,7 @@ type toolCallParams struct {
 	Arguments any    `json:"arguments"`
 }
 
-// CallTool invokes a named MCP tool and decodes the result into dest.
+
 func (c *Client) CallTool(ctx context.Context, toolName string, args any, dest any) error {
 	reqBody := jsonRPCRequest{
 		JSONRPC: "2.0",
@@ -91,9 +89,6 @@ func (c *Client) CallTool(ctx context.Context, toolName string, args any, dest a
 		return fmt.Errorf("mcp server returned status %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	// GitHub's MCP server uses the Streamable HTTP transport and replies
-	// with an SSE envelope ("event: message\ndata: {...}") rather than a
-	// bare JSON body. Strip the SSE framing before parsing JSON.
 	jsonPayload := extractSSEData(respBody)
 
 	var rpcResp jsonRPCResponse
@@ -113,9 +108,7 @@ func (c *Client) CallTool(ctx context.Context, toolName string, args any, dest a
 	return nil
 }
 
-// extractSSEData strips Server-Sent Events framing from a response body,
-// returning just the JSON payload from the last "data:" line. If the
-// body isn't SSE-framed, it's returned unchanged.
+
 func extractSSEData(body []byte) []byte {
 	lines := bytes.Split(body, []byte("\n"))
 	for i := len(lines) - 1; i >= 0; i-- {

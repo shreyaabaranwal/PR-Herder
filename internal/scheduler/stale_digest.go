@@ -7,9 +7,6 @@ import (
 	"github.com/shreyaabaranwal/pr-herder/internal/githubmcp"
 )
 
-// StalePR is the minimal view the digest needs to render -- not the
-// full triage.Result shape, since the digest doesn't run triage rules,
-// it just reports "this has been open too long."
 type StalePR struct {
 	RepoOwner   string
 	RepoName    string
@@ -19,9 +16,6 @@ type StalePR struct {
 	DaysOpen    int
 }
 
-// FilterStale is a pure function -- no network calls -- so it's directly
-// unit-testable without mocking githubmcp. Takes raw open-PR summaries
-// and returns only those older than thresholdDays.
 func FilterStale(prs []githubmcp.PullRequestSummary, now time.Time, thresholdDays int) []StalePR {
 	var stale []StalePR
 	for _, pr := range prs {
@@ -40,11 +34,6 @@ func FilterStale(prs []githubmcp.PullRequestSummary, now time.Time, thresholdDay
 	return stale
 }
 
-// BuildDigestBlocks renders one Slack Block Kit message covering every
-// stale PR found across all repos in a single run. Returns nil when
-// there's nothing stale -- the caller should skip publishing entirely
-// rather than sending an empty "all clear" message every single day,
-// which trains people to ignore the channel.
 func BuildDigestBlocks(stale []StalePR) []map[string]any {
 	if len(stale) == 0 {
 		return nil

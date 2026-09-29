@@ -1,7 +1,4 @@
-// Package store — repos.go adds a read query over webhook_events to
-// answer "which repos have we ever seen," used by the Layer 8 scheduler
-// to know which repos to poll for stale PRs. No new table: this reuses
-// data that ingest already writes on every webhook delivery.
+
 package store
 
 import (
@@ -9,17 +6,13 @@ import (
 	"fmt"
 )
 
-// RepoRef identifies a repo we've seen at least one webhook event from.
+
 type RepoRef struct {
 	Owner string
 	Name  string
 }
 
-// GetDistinctRepos returns every repo_owner/repo_name pair that appears
-// in webhook_events. This is a live "which repos are we watching"
-// signal, not a config list -- if PR Herder has never received a
-// webhook from a repo, that repo won't show up here (which is correct:
-// we shouldn't poll repos we're not actually installed on).
+
 func (s *Store) GetDistinctRepos(ctx context.Context) ([]RepoRef, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT DISTINCT repo_owner, repo_name

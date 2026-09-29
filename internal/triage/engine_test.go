@@ -6,11 +6,7 @@ import (
 	"github.com/shreyaabaranwal/pr-herder/internal/domain"
 )
 
-// Table-driven tests: each case is data, not a separate function. This is
-// the idiomatic Go pattern (used throughout the standard library and
-// most serious Go OSS projects — net/http, encoding/json, etc.) for
-// testing a pure function against many input combinations without
-// duplicating assertion logic.
+
 func TestEngine_Triage(t *testing.T) {
 	testRules := []SensitivePathRule{
 		{PathPrefix: "internal/auth/", Team: "@security-team", Label: "needs-security-review"},
@@ -49,7 +45,7 @@ func TestEngine_Triage(t *testing.T) {
 			},
 			wantSize:        SizeXL,
 			wantPathMatched: true,
-			wantAmbiguous:   false, // matched path = confidently routed, even though XL
+			wantAmbiguous:   false, 
 			wantFirstTimer:  false,
 		},
 		{
@@ -62,7 +58,7 @@ func TestEngine_Triage(t *testing.T) {
 			},
 			wantSize:        SizeXL,
 			wantPathMatched: false,
-			wantAmbiguous:   true, // this is the case ADR 0001 sends to the LLM
+			wantAmbiguous:   true, 
 			wantFirstTimer:  false,
 		},
 		{
@@ -88,7 +84,7 @@ func TestEngine_Triage(t *testing.T) {
 			},
 			wantSize:        SizeM,
 			wantPathMatched: false,
-			wantAmbiguous:   false, // M-sized, unrouted: still confident, not ambiguous
+			wantAmbiguous:   false, 	
 			wantFirstTimer:  false,
 		},
 	}
@@ -113,9 +109,7 @@ func TestEngine_Triage(t *testing.T) {
 	}
 }
 
-// A focused unit test on just the size boundaries — this is the kind of
-// test that catches off-by-one errors in ClassifySize (e.g. is 100 lines
-// "M" or "L"?) without needing a full PullRequest fixture.
+
 func TestClassifySize_Boundaries(t *testing.T) {
 	tests := []struct {
 		additions, deletions int
@@ -128,7 +122,7 @@ func TestClassifySize_Boundaries(t *testing.T) {
 		{100, 0, SizeL},
 		{499, 0, SizeL},
 		{500, 0, SizeXL},
-		{250, 250, SizeXL}, // total 500, boundary via sum not either field alone
+		{250, 250, SizeXL}, 
 	}
 
 	for _, tt := range tests {

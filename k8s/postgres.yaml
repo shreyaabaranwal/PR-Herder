@@ -1,7 +1,4 @@
-# For a real production deployment, use a managed Postgres (RDS, Cloud
-# SQL, etc.) instead of this StatefulSet -- this exists so the whole
-# stack is runnable end-to-end on a local cluster (kind/minikube) for
-# demo purposes.
+
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:

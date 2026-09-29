@@ -7,9 +7,7 @@ import (
 	"time"
 )
 
-// UnprocessedEvent is a webhook_events row still awaiting processing —
-// includes the row's own id (unlike WebhookEvent, used only for inserts)
-// so the worker can mark it processed after handling it.
+
 type UnprocessedEvent struct {
 	ID         int64
 	DeliveryID string
@@ -22,21 +20,9 @@ type UnprocessedEvent struct {
 	RetryCount int
 }
 
-// MaxRetries caps how many times a single event is retried across
-// separate worker poll cycles before being dead-lettered. This is a
-// second, outer layer of retry on top of ingest.withRetry's in-process
-// retries for individual LLM/Slack calls -- if an event still fails
-// after MaxRetries full processOne attempts, something is likely wrong
-// with the event itself (bad payload, a real bug), not just transient
-// network noise.
 const MaxRetries = 5
 
-// GetUnprocessedEvents fetches events awaiting processing, oldest first
-// (FIFO — so a backlog drains in delivery order, not reverse). Bounded
-// by limit so one worker poll can't accidentally try to load an
-// unbounded backlog into memory at once. Dead-lettered events are
-// excluded -- they've exhausted retries and need manual inspection, not
-// another automatic attempt.
+
 func (s *Store) GetUnprocessedEvents(ctx context.Context, limit int) ([]UnprocessedEvent, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, delivery_id, event_type, action, repo_owner, repo_name, pr_number, raw_payload, retry_count
@@ -70,8 +56,7 @@ func (s *Store) GetUnprocessedEvents(ctx context.Context, limit int) ([]Unproces
 	return events, nil
 }
 
-// MarkEventProcessed sets processed_at, so GetUnprocessedEvents won't
-// return this row again. Called after successful processing.
+
 func (s *Store) MarkEventProcessed(ctx context.Context, id int64) error {
 	_, err := s.pool.Exec(ctx, `
 		UPDATE webhook_events SET processed_at = $1 WHERE id = $2
@@ -82,11 +67,7 @@ func (s *Store) MarkEventProcessed(ctx context.Context, id int64) error {
 	return nil
 }
 
-// MarkEventFailed records a processing error and increments retry_count.
-// Once retry_count reaches MaxRetries, the event is dead-lettered
-// (dead_lettered_at set) so GetUnprocessedEvents stops returning it --
-// a permanently-broken event would otherwise retry forever, every poll
-// cycle, indefinitely.
+
 func (s *Store) MarkEventFailed(ctx context.Context, id int64, processErr error) error {
 	_, err := s.pool.Exec(ctx, `
 		UPDATE webhook_events
@@ -104,9 +85,6 @@ func (s *Store) MarkEventFailed(ctx context.Context, id int64, processErr error)
 	return nil
 }
 
-// GetDeadLetteredEvents returns events that exhausted all retries -- for
-// manual inspection (e.g. a future admin endpoint or CLI command), not
-// automatic reprocessing.
 func (s *Store) GetDeadLetteredEvents(ctx context.Context, limit int) ([]UnprocessedEvent, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, delivery_id, event_type, action, repo_owner, repo_name, pr_number, raw_payload, retry_count
